@@ -1,0 +1,30 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "80d2aa29ff6a1eefcce43421c92986c6"
+name = "Import Stock Boutique"
+application_url = "https://import-stock.woora.fr"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = true
+
+[webhooks]
+api_version = "2026-04"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "/webhooks/app/scopes_update"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/app/uninstalled"
+
+[access_scopes]
+scopes = "read_metaobject_definitions,write_metaobject_definitions,read_metaobjects,write_metaobjects,read_inventory,read_locations,read_products,write_inventory"
+
+[auth]
+redirect_urls = [
+  "https://import-stock.woora.fr/auth/callback",
+  "https://import-stock.woora.fr/auth/shopify/callback",
+  "https://import-stock.woora.fr/api/auth/callback",
+]

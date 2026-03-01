@@ -1,0 +1,9 @@
+<prestashop>
+  <order>
+    <id><![CDATA[1000500]]></id>
+    <id_customer><![CDATA[21749]]></id_customer>
+    <reference><![CDATA[ABC-1000500]]></reference>
+    <date_add><![CDATA[2026-02-27 10:15:00]]></date_add>
+    <date_upd><![CDATA[2026-02-27 10:16:00]]></date_upd>
+  </order>
+</prestashop>
