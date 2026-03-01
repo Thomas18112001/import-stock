@@ -5,33 +5,15 @@ import {
   shopifyApp,
 } from "@shopify/shopify-app-react-router/server";
 import { MemorySessionStorage } from "@shopify/shopify-app-session-storage-memory";
-import { REQUIRED_SHOPIFY_SCOPES, REQUIRED_SHOPIFY_SCOPES_CSV, resolveAuthScopes } from "./config/shopifyScopes";
-import "./env.server";
-
-function resolveAppUrl(): string {
-  const shopifyAppUrl = (process.env.SHOPIFY_APP_URL ?? "").trim();
-  const appUrl = (process.env.APP_URL ?? "").trim();
-  const resolvedAppUrl = shopifyAppUrl || appUrl;
-
-  if (process.env.NODE_ENV === "production" && !resolvedAppUrl) {
-    throw new Error(
-      "Missing app URL in production: define SHOPIFY_APP_URL (recommended) or APP_URL.",
-    );
-  }
-
-  return resolvedAppUrl;
-}
-
-const resolvedScopes = resolveAuthScopes(process.env.SCOPES);
-const appUrl = resolveAppUrl();
-if (process.env.NODE_ENV === "production" && appUrl.includes("example.com")) {
-  throw new Error(
-    "Invalid application URL in production: contains example.com. Define SHOPIFY_APP_URL/APP_URL with your real domain.",
-  );
-}
+import { getShopifyEnv, validateStartupEnv } from "./config/env";
+import { REQUIRED_SHOPIFY_SCOPES, REQUIRED_SHOPIFY_SCOPES_CSV, parseScopes } from "./config/shopifyScopes";
+validateStartupEnv();
+const shopifyEnv = getShopifyEnv();
+const resolvedScopes = parseScopes(shopifyEnv.scopesCsv);
+const appUrl = shopifyEnv.shopifyAppUrl;
 if (process.env.DEBUG === "true") {
   console.info("[debug] shopify auth scopes", {
-    envScopes: process.env.SCOPES ?? "",
+    envScopes: shopifyEnv.scopesCsv,
     resolvedScopes: resolvedScopes.join(","),
     expectedScopes: REQUIRED_SHOPIFY_SCOPES.join(","),
     appUrl,
@@ -46,9 +28,11 @@ if (process.env.DEBUG === "true") {
 }
 
 const shopify = shopifyApp({
-  apiKey: process.env.SHOPIFY_API_KEY,
-  apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
-  apiVersion: ApiVersion.October25,
+  apiKey: shopifyEnv.shopifyApiKey,
+  apiSecretKey: shopifyEnv.shopifyApiSecret,
+  // Keep this explicit to avoid silent defaults drifting across releases.
+  // Update after checking supported values in node_modules/@shopify/shopify-api/dist/ts/lib/types.d.ts.
+  apiVersion: ApiVersion.January26,
   scopes: resolvedScopes,
   appUrl,
   authPathPrefix: "/auth",

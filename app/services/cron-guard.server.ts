@@ -1,3 +1,5 @@
+import { env } from "../env.server";
+
 const lastHitByKey = new Map<string, number>();
 const WINDOW_MS = 60_000;
 
@@ -21,8 +23,7 @@ export function assertCronSecret(request: Request, expectedSecret: string | null
 }
 
 export function assertCronAccess(request: Request): void {
-  const cronSecret = (process.env.CRON_SECRET ?? "").trim() || null;
-  assertCronSecret(request, cronSecret);
+  assertCronSecret(request, env.cronSecret);
 
   const key = "sync-cron";
   const now = Date.now();

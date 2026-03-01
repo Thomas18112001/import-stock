@@ -1,0 +1,17 @@
+[Unit]
+Description=Import Stock Wearmoi Shopify App
+After=network.target
+
+[Service]
+Type=simple
+User=appuser
+Group=appuser
+WorkingDirectory=/var/www/import-stock-wearmoi
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npm run start
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

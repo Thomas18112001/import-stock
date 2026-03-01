@@ -1,121 +1,70 @@
-# Import Stock Boutique
+# Wear Moi Stock Sync
 
-Application Shopify embedded (React Router + TypeScript + Polaris) pour importer des réceptions Prestashop BtoB et ajouter le stock dans une boutique Shopify.
+Shopify embedded app (React Router / TypeScript) to import Prestashop receipts and sync inventory to Shopify locations.
 
-## Variables d'environnement
+## Quick start
 
-Utiliser `.env` (ignoré par git) avec:
+1. Install dependencies:
 
-```dotenv
-PRESTA_BASE_URL=https://btob.wearmoi.com
-PRESTA_WS_KEY=...
-PRESTA_BOUTIQUE_CUSTOMER_ID=21749
-SHOPIFY_DEFAULT_LOCATION_NAME=Boutique Toulon
-SYNC_BATCH_SIZE=50
-SYNC_MAX_PER_RUN=200
-CRON_SECRET=...
-DEBUG=false
+```bash
+npm ci
 ```
 
-## Commandes
+2. Create local environment file:
+
+```bash
+cp .env.example .env
+```
+
+3. Run in dev:
 
 ```bash
 npm run dev
-npm run typecheck
-npm run lint
-npm run test:unit
+```
+
+4. Build and run production server locally:
+
+```bash
 npm run build
+npm run start
 ```
 
-## Procédure scopes Shopify (dev)
+`npm run start` now loads `.env` automatically with Node `--env-file=.env`.
 
-Quand les scopes changent:
+## NPM scripts
 
-1. `shopify app config link`
-2. `shopify app deploy`
-3. `shopify app dev clean`
-4. Désinstaller l'app dans Shopify Admin
-5. `shopify app dev --store woora-app-2.myshopify.com`
-6. Réinstaller depuis Shopify Admin
+- `npm run dev`: Shopify dev server
+- `npm run build`: production build
+- `npm run start`: run built server with `.env` loading
+- `npm run start:plain`: run built server without Node `--env-file`
+- `npm run start:prod`: same as `start`, explicit production entrypoint
+- `npm run typecheck`: type generation + TypeScript checks
+- `npm run test:unit`: unit tests
 
-Vérification:
+## Environment validation
 
-1. `shopify app env show` -> `SCOPES` non vide
-2. `SHOPIFY_API_KEY` = `client_id` dans `shopify.app.toml`
-3. Plus d'erreur `Access denied ... Required access`
+Environment validation is centralized in:
 
-## Debug
+- [app/config/env.ts](/c:/Users/Thoma/Desktop/Wearmoiapp/wear-moi-stock-sync/app/config/env.ts)
 
-Mettre `DEBUG=true` pour activer:
+At startup, missing/invalid variables are reported in a single readable error block.
 
-1. logs auth/session route par route
-2. logs navigation `Ouvrir` (trace id, id encode, path)
-3. logs loader detail (param recu/decoder, found/not found)
-4. logs cursor (read/write/display)
-5. logs timing sync/prepare/apply/annulation
+## VPS deploy
 
-Les logs n'affichent jamais `PRESTA_WS_KEY`.
+- Reproducible script: [scripts/deploy_vps.sh](/c:/Users/Thoma/Desktop/Wearmoiapp/wear-moi-stock-sync/scripts/deploy_vps.sh)
+- Default process manager: `systemd` via [deploy/import-stock-wearmoi.service](/c:/Users/Thoma/Desktop/Wearmoiapp/wear-moi-stock-sync/deploy/import-stock-wearmoi.service)
+- Nginx vhost template: [deploy/nginx/import-stock.woora.fr.conf](/c:/Users/Thoma/Desktop/Wearmoiapp/wear-moi-stock-sync/deploy/nginx/import-stock.woora.fr.conf)
 
-## Check avant prod
+## Documentation map
 
-1. Scopes minimaux confirmés:
-   `read_metaobject_definitions,write_metaobject_definitions,read_metaobjects,write_metaobjects,read_inventory,read_locations,read_products,write_inventory`
-2. Toutes les routes `/app/*` et actions utilisent `requireAdmin`.
-3. Endpoint cron protégé par `X-CRON-SECRET` + rate limit.
-4. Import doublon bloqué (même ID Prestashop).
-5. Ajout de stock doublon bloqué (statut `APPLIED`).
-6. Apply stock = delta positif seulement, jamais overwrite.
-7. Retrait du stock refusé si le stock deviendrait négatif.
-8. Pas d'affichage d'identifiants techniques en UI (client Prestashop).
+- [docs/ARCHITECTURE.md](/c:/Users/Thoma/Desktop/Wearmoiapp/wear-moi-stock-sync/docs/ARCHITECTURE.md)
+- [docs/CONFIGURATION.md](/c:/Users/Thoma/Desktop/Wearmoiapp/wear-moi-stock-sync/docs/CONFIGURATION.md)
+- [docs/DEPLOYMENT_VPS.md](/c:/Users/Thoma/Desktop/Wearmoiapp/wear-moi-stock-sync/docs/DEPLOYMENT_VPS.md)
+- [docs/TROUBLESHOOTING.md](/c:/Users/Thoma/Desktop/Wearmoiapp/wear-moi-stock-sync/docs/TROUBLESHOOTING.md)
+- [README_PROD.md](/c:/Users/Thoma/Desktop/Wearmoiapp/wear-moi-stock-sync/README_PROD.md)
 
-## Multi-boutiques
+## Security
 
-Le mapping Shopify -> Prestashop est géré dans:
-
-- `app/config/boutiques.ts`
-
-Format:
-
-```ts
-{
-  shopifyLocationName: "Boutique X",
-  prestaCustomerId: 12345 | null
-}
-```
-
-Règles:
-
-1. `prestaCustomerId` défini: synchronisation active.
-2. `prestaCustomerId = null`: boutique marquée `À configurer`, synchronisation bloquée avec message clair.
-3. Curseur et date de dernière synchronisation sont stockés par boutique (metafields shop JSON).
-
-### Ajouter l'ID Prestashop de Chicago
-
-Modifier [boutiques.ts](/c:/Users/Thoma/Desktop/Wearmoiapp/wear-moi-stock-sync/app/config/boutiques.ts) et remplacer:
-
-```ts
-{
-  key: "chicago",
-  shopifyLocationName: "Boutique Chicago",
-  prestaCustomerId: null,
-}
-```
-
-par:
-
-```ts
-{
-  key: "chicago",
-  shopifyLocationName: "Boutique Chicago",
-  prestaCustomerId: <ID_PRESTASHOP_CHICAGO>,
-}
-```
-
-Puis redémarrer l'app et relancer une synchronisation.
-
-## Documentation tests et securite
-
-1. [TESTING.md](./TESTING.md)
-2. [FUNCTIONAL_CHECK_REPORT.md](./FUNCTIONAL_CHECK_REPORT.md)
-3. [FUNCTIONAL_TEST_REPORT.md](./FUNCTIONAL_TEST_REPORT.md)
-4. [SECURITY_AUDIT.md](./SECURITY_AUDIT.md)
+- Never commit `.env` or secrets.
+- `.env` is git-ignored.
+- Debug logs must not expose credentials.
