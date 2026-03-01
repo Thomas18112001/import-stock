@@ -4,6 +4,7 @@
   "scripts": {
     "build": "react-router build",
     "dev": "shopify app dev",
+    "dev:local": "powershell -ExecutionPolicy Bypass -File scripts/dev-local.ps1",
     "config:link": "shopify app config link",
     "generate": "shopify app generate",
     "deploy": "shopify app deploy",
@@ -12,6 +13,8 @@
     "start": "node --env-file=.env ./node_modules/@react-router/serve/dist/cli.js ./build/server/index.js",
     "start:plain": "react-router-serve ./build/server/index.js",
     "start:prod": "node --env-file=.env ./node_modules/@react-router/serve/dist/cli.js ./build/server/index.js",
+    "prepare:vps": "powershell -ExecutionPolicy Bypass -File scripts/prepare-vps.ps1",
+    "redeploy:vps:hint": "echo \"On VPS: chmod +x scripts/redeploy_vps.sh && ./scripts/redeploy_vps.sh\"",
     "docker-start": "npm run start",
     "lint": "eslint --ignore-path .gitignore --cache --cache-location ./node_modules/.cache/eslint .",
     "shopify": "shopify",

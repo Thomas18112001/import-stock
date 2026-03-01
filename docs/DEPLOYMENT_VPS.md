@@ -5,7 +5,7 @@ Contexte cible:
 - VPS Ubuntu
 - Node `v20.19.6`
 - Domaine `https://import-stock.woora.fr`
-- Port interne app `3000`
+- Port interne app `3001`
 - Repo `https://github.com/Thomas18112001/import-stock.git`
 
 ## 1) Prerequis serveur
@@ -45,6 +45,14 @@ sudo chmod +x scripts/deploy_vps.sh
 sudo ./scripts/deploy_vps.sh
 ```
 
+Pour les mises a jour suivantes (apres push GitHub), utiliser:
+
+```bash
+cd /var/www/import-stock-wearmoi
+chmod +x scripts/redeploy_vps.sh
+./scripts/redeploy_vps.sh
+```
+
 ## 3) Fichier .env (a creer manuellement)
 
 Ne jamais commiter les secrets.  
@@ -52,7 +60,7 @@ Le script ne cree pas `.env`.
 
 ```bash
 cd /var/www/import-stock-wearmoi
-cp .env.example .env
+cp .env.vps.example .env
 nano .env
 ```
 
