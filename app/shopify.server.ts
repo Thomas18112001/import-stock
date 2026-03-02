@@ -4,13 +4,17 @@ import {
   AppDistribution,
   shopifyApp,
 } from "@shopify/shopify-app-react-router/server";
-import { MemorySessionStorage } from "@shopify/shopify-app-session-storage-memory";
+import { SQLiteSessionStorage } from "@shopify/shopify-app-session-storage-sqlite";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { getShopifyEnv, validateStartupEnv } from "./config/env";
 import { REQUIRED_SHOPIFY_SCOPES, REQUIRED_SHOPIFY_SCOPES_CSV, parseScopes } from "./config/shopifyScopes";
 validateStartupEnv();
 const shopifyEnv = getShopifyEnv();
 const resolvedScopes = parseScopes(shopifyEnv.scopesCsv);
 const appUrl = shopifyEnv.shopifyAppUrl;
+const sessionDbPath = process.env.SHOPIFY_SESSION_DB_PATH || "./data/shopify_sessions.sqlite";
+mkdirSync(dirname(sessionDbPath), { recursive: true });
 if (process.env.DEBUG === "true") {
   console.info("[debug] shopify auth scopes", {
     envScopes: shopifyEnv.scopesCsv,
@@ -36,7 +40,7 @@ const shopify = shopifyApp({
   scopes: resolvedScopes,
   appUrl,
   authPathPrefix: "/auth",
-  sessionStorage: new MemorySessionStorage(),
+  sessionStorage: new SQLiteSessionStorage(sessionDbPath),
   distribution: AppDistribution.AppStore,
   future: {
     expiringOfflineAccessTokens: true,
