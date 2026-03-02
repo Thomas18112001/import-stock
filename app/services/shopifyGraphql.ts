@@ -1,5 +1,6 @@
 import type { AdminClient } from "./auth.server";
 import { toMissingScopeError } from "../utils/shopifyScopeErrors";
+import { normalizeSkuText } from "../utils/validators";
 
 type GraphqlResult<T> = { data?: T; errors?: Array<{ message: string }> };
 
@@ -70,11 +71,14 @@ export async function resolveSkus(
   admin: AdminClient,
   skus: string[],
 ): Promise<Map<string, { variantId: string; inventoryItemId: string; variantTitle: string }>> {
-  const uniq = Array.from(new Set(skus.map((s) => s.trim()).filter(Boolean)));
+  const uniq = Array.from(new Set(skus.map((s) => normalizeSkuText(s)).filter(Boolean)));
   const result = new Map<string, { variantId: string; inventoryItemId: string; variantTitle: string }>();
+  const byNormalizedSku = new Map<string, { variantId: string; inventoryItemId: string; variantTitle: string }>();
+  const normalizeSkuKey = (sku: string) => normalizeSkuText(sku).toUpperCase();
+  const escapeSearchValue = (value: string) => value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
   for (let i = 0; i < uniq.length; i += 20) {
     const batch = uniq.slice(i, i + 20);
-    const queryString = batch.map((sku) => `sku:${sku.replace(/"/g, '\\"')}`).join(" OR ");
+    const queryString = batch.map((sku) => `sku:"${escapeSearchValue(sku)}"`).join(" OR ");
     const data = await graphqlRequest<{
       productVariants: {
         nodes: Array<{
@@ -107,12 +111,20 @@ export async function resolveSkus(
         const variantTitle = node.product?.title
           ? `${node.product.title} / ${node.title}`
           : node.title;
-        result.set(node.sku, {
+        const match = {
           variantId: node.id,
           inventoryItemId: node.inventoryItem.id,
           variantTitle,
-        });
+        };
+        byNormalizedSku.set(normalizeSkuKey(node.sku), match);
+        result.set(normalizeSkuText(node.sku), match);
       }
+    }
+  }
+  for (const requestedSku of uniq) {
+    const match = byNormalizedSku.get(normalizeSkuKey(requestedSku));
+    if (match) {
+      result.set(requestedSku, match);
     }
   }
   return result;

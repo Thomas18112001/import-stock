@@ -100,3 +100,30 @@ test("happy path simule: resolution SKU -> apply stock sur la bonne boutique", a
     [15, 3],
   );
 });
+
+test("resolveSkus mappe un SKU même si la casse diffère entre Prestashop et Shopify", async () => {
+  const admin = {
+    graphql: async () =>
+      new Response(
+        JSON.stringify({
+          data: {
+            productVariants: {
+              nodes: [
+                {
+                  id: "gid://shopify/ProductVariant/1",
+                  title: "S",
+                  sku: "ABBISRED",
+                  product: { title: "Abbis" },
+                  inventoryItem: { id: "gid://shopify/InventoryItem/1" },
+                },
+              ],
+            },
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+  };
+
+  const resolved = await resolveSkus(admin, ["abbisred"]);
+  assert.equal(resolved.get("abbisred")?.inventoryItemId, "gid://shopify/InventoryItem/1");
+});
