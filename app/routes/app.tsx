@@ -23,18 +23,18 @@ export default function App() {
         <Frame>
           <Box minHeight="100vh" paddingBlockEnd="800">
             <Outlet />
-            <Box paddingBlockStart="1000" paddingBlockEnd="900">
+            <Box paddingBlockStart="1000" paddingBlockEnd="800">
               <InlineStack align="center" blockAlign="center" gap="200">
                 <img src="/logo-woora.png" alt="Woora" style={{ width: "180px", height: "auto" }} />
               </InlineStack>
               <Box paddingBlockStart="300">
                 <InlineStack align="center">
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Application développée par{" "}
-                  <Link url="mailto:contact@woora.fr" removeUnderline>
-                    Woora
-                  </Link>
-                </Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Application développée par{" "}
+                    <Link url="mailto:contact@woora.fr" removeUnderline>
+                      Woora
+                    </Link>
+                  </Text>
                 </InlineStack>
               </Box>
             </Box>
