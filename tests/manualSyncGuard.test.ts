@@ -7,6 +7,6 @@ test("manual sync guard bloque deux refresh trop rapproches", () => {
   assert.doesNotThrow(() => assertManualSyncRateLimit(shop));
   assert.throws(
     () => assertManualSyncRateLimit(shop),
-    /Synchronisation trop frequente/,
+    /Synchronisation trop fréquente/,
   );
 });

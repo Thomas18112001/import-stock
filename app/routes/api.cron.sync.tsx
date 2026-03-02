@@ -2,7 +2,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { assertCronAccess } from "../services/cron-guard.server";
 import { syncRun } from "../services/receiptService";
 import { unauthenticated } from "../shopify.server";
-import { isShopifyGid } from "../utils/validators";
+import { isShopifyGid, isValidShopDomain } from "../utils/validators";
 
 async function runCronSync(request: Request): Promise<Response> {
   assertCronAccess(request);
@@ -12,8 +12,8 @@ async function runCronSync(request: Request): Promise<Response> {
   const shop = String(form?.get("shop") ?? url.searchParams.get("shop") ?? "");
   const locationId = String(form?.get("locationId") ?? url.searchParams.get("locationId") ?? "").trim();
 
-  if (!shop) {
-    return Response.json({ ok: false, error: "Bad request: missing shop." }, { status: 400 });
+  if (!shop || !isValidShopDomain(shop)) {
+    return Response.json({ ok: false, error: "Bad request: invalid shop." }, { status: 400 });
   }
   if (!isShopifyGid(locationId)) {
     return Response.json({ ok: false, error: "Bad request: invalid locationId." }, { status: 400 });

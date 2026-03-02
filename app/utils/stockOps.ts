@@ -6,6 +6,12 @@ export type DeltaLine = {
   delta: number;
 };
 
+export type JournalLine = {
+  sku: string;
+  inventoryItemId: string;
+  qtyDelta: number;
+};
+
 export function aggregateDeltas(lines: DeltaLine[]): DeltaLine[] {
   const aggregated = new Map<string, DeltaLine>();
   for (const line of lines) {
@@ -20,19 +26,20 @@ export function aggregateDeltas(lines: DeltaLine[]): DeltaLine[] {
   return [...aggregated.values()].filter((line) => line.delta !== 0);
 }
 
+export function invertJournalDeltas(lines: JournalLine[]): DeltaLine[] {
+  return aggregateDeltas(
+    lines.map((line) => ({
+      sku: line.sku,
+      inventoryItemId: line.inventoryItemId,
+      delta: -line.qtyDelta,
+    })),
+  );
+}
+
 export function isDuplicateApplyStatus(status: string): boolean {
   return !canApplyFromStatus(status);
 }
 
 export function canDeleteReceiptStatus(status: string): boolean {
   return status !== "APPLIED";
-}
-
-export function findNegativeRollbackSkus(
-  currentByInventoryItemId: Map<string, number>,
-  rollbackLines: Array<{ sku: string; inventoryItemId: string; delta: number }>,
-): string[] {
-  return rollbackLines
-    .filter((line) => (currentByInventoryItemId.get(line.inventoryItemId) ?? 0) + line.delta < 0)
-    .map((line) => line.sku);
 }

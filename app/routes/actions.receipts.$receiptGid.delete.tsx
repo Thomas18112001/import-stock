@@ -2,6 +2,7 @@ import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 import { requireAdmin } from "../services/auth.server";
 import { deleteReceipt } from "../services/receiptService";
+import { toPublicErrorMessage } from "../utils/error.server";
 import { decodeReceiptId } from "../utils/receiptId";
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
@@ -26,7 +27,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     return Response.json({ ok: true, deletedGid: receiptGid });
   } catch (error) {
     return Response.json(
-      { ok: false, error: error instanceof Error ? error.message : "Suppression impossible." },
+      { ok: false, error: toPublicErrorMessage(error, "Suppression impossible.") },
       { status: 400 },
     );
   }

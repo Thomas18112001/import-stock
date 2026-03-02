@@ -1,5 +1,6 @@
 const SHOPIFY_GID_PATTERN = /^gid:\/\/shopify\/[A-Za-z_]+\/\d+$/;
 const SKU_ALLOWED_PATTERN = /^[A-Za-z0-9._-]{1,80}$/;
+const SHOP_DOMAIN_PATTERN = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/;
 
 export function parsePositiveIntInput(value: FormDataEntryValue | null): number | null {
   const raw = String(value ?? "").trim();
@@ -7,6 +8,15 @@ export function parsePositiveIntInput(value: FormDataEntryValue | null): number 
   if (!/^\d+$/.test(raw)) return null;
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+export function parseNonNegativeIntInput(value: FormDataEntryValue | string | null): number | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  if (!/^\d+$/.test(raw)) return null;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 0) return null;
   return parsed;
 }
 
@@ -25,10 +35,18 @@ export function normalizeSku(raw: FormDataEntryValue | null): string {
   return String(raw ?? "").trim().slice(0, 80);
 }
 
+export function normalizeSkuText(raw: string): string {
+  return raw.trim().slice(0, 80);
+}
+
 export function isValidSku(sku: string): boolean {
   return SKU_ALLOWED_PATTERN.test(sku);
 }
 
 export function isShopifyGid(value: string): boolean {
   return SHOPIFY_GID_PATTERN.test(value);
+}
+
+export function isValidShopDomain(value: string): boolean {
+  return SHOP_DOMAIN_PATTERN.test(value.trim().toLowerCase());
 }

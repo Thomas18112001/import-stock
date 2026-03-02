@@ -1,6 +1,8 @@
 import type { ActionFunctionArgs } from "react-router";
+import { assertActionRateLimit, getClientIp } from "../services/action-guard.server";
 import { requireAdmin } from "../services/auth.server";
 import { prepareReceipt } from "../services/receiptService";
+import { toPublicErrorMessage } from "../utils/error.server";
 import { decodeReceiptId } from "../utils/receiptId";
 import { isShopifyGid } from "../utils/validators";
 
@@ -20,11 +22,12 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     return Response.json({ ok: false, error: "Sélection de la boutique invalide." }, { status: 400 });
   }
   try {
+    assertActionRateLimit("prepare", shop, getClientIp(request), 3_000);
     await prepareReceipt(admin, shop, receiptGid, locationId);
     return Response.json({ ok: true });
   } catch (error) {
     return Response.json(
-      { ok: false, error: error instanceof Error ? error.message : "Erreur de diagnostic SKU." },
+      { ok: false, error: toPublicErrorMessage(error, "Erreur de diagnostic SKU.") },
       { status: 400 },
     );
   }

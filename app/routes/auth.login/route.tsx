@@ -60,7 +60,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const errors = loginErrorMessage(await login(request));
     if (errors.shop) {
       return {
-        message: `Autorisation Shopify non initialisee (${errors.shop}). Relancez depuis Shopify Admin.`,
+        message: `Autorisation Shopify non initialisée (${errors.shop}). Relancez depuis Shopify Admin.`,
       } satisfies AuthLoginData;
     }
 

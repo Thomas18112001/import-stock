@@ -1,6 +1,8 @@
 import type { ActionFunctionArgs } from "react-router";
+import { assertActionRateLimit, getClientIp } from "../services/action-guard.server";
 import { requireAdmin } from "../services/auth.server";
 import { applyReceipt } from "../services/receiptService";
+import { toPublicErrorMessage } from "../utils/error.server";
 import { decodeReceiptId } from "../utils/receiptId";
 import { isValidSku, normalizeSku } from "../utils/validators";
 
@@ -25,6 +27,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   }
 
   try {
+    assertActionRateLimit("apply", shop, getClientIp(request), 5_000);
     await applyReceipt(admin, shop, {
       receiptGid,
       locationId,
@@ -34,7 +37,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     return Response.json({ ok: true });
   } catch (error) {
     return Response.json(
-      { ok: false, error: error instanceof Error ? error.message : "Erreur d'ajout de stock." },
+      { ok: false, error: toPublicErrorMessage(error, "Erreur d'ajout de stock.") },
       { status: 400 },
     );
   }

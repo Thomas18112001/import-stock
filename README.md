@@ -68,3 +68,26 @@ At startup, missing/invalid variables are reported in a single readable error bl
 - Never commit `.env` or secrets.
 - `.env` is git-ignored.
 - Debug logs must not expose credentials.
+
+## Sécurité stock (production)
+
+- Toutes les actions sensibles (`sync/import/prepare/apply/rollback`) sont protégées par session Shopify (hors cron/webhooks dédiés).
+- Contexte boutique renforcé:
+  - validation stricte du shop session;
+  - rejet en cas de shop incohérent;
+  - `location_id` stockée dès l'import et utilisée comme source de vérité.
+- Verrouillage boutique sur page Réception:
+  - sélecteur boutique désactivé;
+  - serveur refuse toute action si la location demandée diffère de la location enregistrée.
+- Apply stock limité strictement aux SKU de la réception (résolus, non ignorés, qty > 0).
+- Anti-abus:
+  - rate-limit en mémoire par shop + IP;
+  - mutex par réception sur `apply/rollback`.
+
+## Rollback négatif
+
+- Le rollback applique l'inverse exact du journal d'application (`adjustment` + `adjustment_line`).
+- Le retrait n'est plus bloqué par un contrôle local de stock négatif: objectif de restauration exacte de l'état précédent.
+- Idempotence:
+  - retrait possible uniquement depuis `APPLIED`;
+  - une réception déjà rollback (`ROLLED_BACK`) ne peut pas être retirée une seconde fois.

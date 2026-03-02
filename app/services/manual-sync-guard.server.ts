@@ -5,7 +5,7 @@ export function assertManualSyncRateLimit(shop: string): void {
   const now = Date.now();
   const lastHit = lastSyncByShop.get(shop) ?? 0;
   if (now - lastHit < WINDOW_MS) {
-    throw new Error("Synchronisation trop frequente. Reessayez dans quelques secondes.");
+    throw new Error("Synchronisation trop fréquente. Réessayez dans quelques secondes.");
   }
   lastSyncByShop.set(shop, now);
 }

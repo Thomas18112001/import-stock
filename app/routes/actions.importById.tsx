@@ -1,6 +1,8 @@
 import type { ActionFunctionArgs } from "react-router";
+import { assertActionRateLimit, getClientIp } from "../services/action-guard.server";
 import { requireAdmin } from "../services/auth.server";
 import { importById } from "../services/receiptService";
+import { toPublicErrorMessage } from "../utils/error.server";
 import { isShopifyGid, parsePositiveIntInput } from "../utils/validators";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -15,6 +17,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return Response.json({ ok: false, error: "ID commande Prestashop invalide." }, { status: 400 });
   }
   try {
+    assertActionRateLimit("import", shop, getClientIp(request), 5_000);
     const result = await importById(admin, shop, orderId, locationId);
     return Response.json({
       ok: true,
@@ -28,7 +31,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
   } catch (error) {
     return Response.json(
-      { ok: false, error: error instanceof Error ? error.message : "Erreur d'import." },
+      { ok: false, error: toPublicErrorMessage(error, "Erreur d'import.") },
       { status: 400 },
     );
   }

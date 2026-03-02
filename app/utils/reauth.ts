@@ -12,3 +12,7 @@ export function shouldTriggerReauth(url: URL): boolean {
   return url.searchParams.get("reauth") !== "1";
 }
 
+
+export function clearReauthGuardCookie(): string {
+  return "wm_reauth_guard=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax";
+}

@@ -1,5 +1,6 @@
 import { authenticate } from "../shopify.server";
 import { parseScopes, REQUIRED_SHOPIFY_SCOPES } from "../config/shopifyScopes";
+import { isValidShopDomain } from "../utils/validators";
 
 export type AdminClient = {
   graphql: (
@@ -40,6 +41,13 @@ export async function requireAdmin(request: Request): Promise<{
   }
 
   const sessionShop = auth.session.shop;
+  if (!isValidShopDomain(sessionShop)) {
+    throw new Response("Contexte boutique invalide.", { status: 403 });
+  }
+  const requestShop = new URL(request.url).searchParams.get("shop");
+  if (requestShop && requestShop !== sessionShop) {
+    throw new Response("Contexte boutique incohérent.", { status: 403 });
+  }
   const session = auth.session as {
     email?: string | null;
     userId?: string | number | bigint | null;

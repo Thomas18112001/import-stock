@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs } from "react-router";
 import { requireAdmin } from "../services/auth.server";
 import { toggleSkip } from "../services/receiptService";
+import { toPublicErrorMessage } from "../utils/error.server";
 import { decodeReceiptId } from "../utils/receiptId";
 import { isValidSku, normalizeSku } from "../utils/validators";
 
@@ -25,7 +26,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     return Response.json({ ok: true });
   } catch (error) {
     return Response.json(
-      { ok: false, error: error instanceof Error ? error.message : "Erreur de mise à jour du saut de ligne." },
+      { ok: false, error: toPublicErrorMessage(error, "Erreur de mise à jour du saut de ligne.") },
       { status: 400 },
     );
   }

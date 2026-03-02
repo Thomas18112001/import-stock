@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { formatRelativeSyncFr } from "../app/utils/relativeTimeFr";
 
 test("wording FR: format relatif synchronisation", () => {
-  assert.equal(formatRelativeSyncFr(undefined), "Aucune synchronisation recente.");
-  assert.equal(formatRelativeSyncFr("invalid-date"), "Aucune synchronisation recente.");
+  assert.equal(formatRelativeSyncFr(undefined), "Aucune synchronisation récente.");
+  assert.equal(formatRelativeSyncFr("invalid-date"), "Aucune synchronisation récente.");
 });
 
 test("wording FR: affiche minutes/heures", () => {

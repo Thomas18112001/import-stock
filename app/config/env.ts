@@ -4,6 +4,7 @@ type CoreEnv = {
   nodeEnv: NodeEnv;
   port: number;
   prestaBaseUrl: string;
+  prestaAllowedHost: string;
   prestaWsKey: string;
   prestaBoutiqueCustomerId: number;
   shopifyDefaultLocationName: string;
@@ -119,6 +120,7 @@ function validateEnv(mode: ValidateMode): StartupEnv {
   const port = parsePort(errors);
 
   let prestaBaseUrl = "";
+  let prestaAllowedHost = "";
   let prestaWsKey = "";
   let prestaBoutiqueCustomerId = 0;
   let shopifyDefaultLocationName = "";
@@ -129,9 +131,20 @@ function validateEnv(mode: ValidateMode): StartupEnv {
 
   if (mode.includeCore) {
     const prestaBaseUrlRaw = requireString("PRESTA_BASE_URL", errors);
+    prestaAllowedHost = readEnv("PRESTA_ALLOWED_HOST") ?? "btob.wearmoi.com";
+    if (!/^[a-z0-9.-]+$/i.test(prestaAllowedHost)) {
+      errors.push(`- PRESTA_ALLOWED_HOST has invalid format (received "${prestaAllowedHost}")`);
+    }
     if (prestaBaseUrlRaw) {
       try {
-        prestaBaseUrl = normalizeUrl(prestaBaseUrlRaw);
+        const normalized = normalizeUrl(prestaBaseUrlRaw);
+        const parsed = new URL(normalized);
+        if (parsed.hostname !== prestaAllowedHost) {
+          errors.push(
+            `- PRESTA_BASE_URL host must exactly match PRESTA_ALLOWED_HOST (${prestaAllowedHost}), received "${parsed.hostname}"`,
+          );
+        }
+        prestaBaseUrl = normalized;
       } catch {
         errors.push(`- PRESTA_BASE_URL must be a valid absolute URL (received "${prestaBaseUrlRaw}")`);
       }
@@ -170,6 +183,7 @@ function validateEnv(mode: ValidateMode): StartupEnv {
     nodeEnv,
     port,
     prestaBaseUrl,
+    prestaAllowedHost,
     prestaWsKey,
     prestaBoutiqueCustomerId,
     shopifyDefaultLocationName,
@@ -197,6 +211,7 @@ export function getCoreEnv(): CoreEnv {
       nodeEnv: validated.nodeEnv,
       port: validated.port,
       prestaBaseUrl: validated.prestaBaseUrl,
+      prestaAllowedHost: validated.prestaAllowedHost,
       prestaWsKey: validated.prestaWsKey,
       prestaBoutiqueCustomerId: validated.prestaBoutiqueCustomerId,
       shopifyDefaultLocationName: validated.shopifyDefaultLocationName,

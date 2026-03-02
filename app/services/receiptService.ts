@@ -2,8 +2,14 @@ import { buildMissingPrestaConfigMessage, getBoutiqueMappingByLocationName } fro
 import { env } from "../env.server";
 import { toShopifyDateTime, toShopifyNowDateTime } from "../utils/dateTime";
 import { debugLog } from "../utils/debug";
-import { canAdjustSkuFromStatus, canApplyFromStatus, skuAdjustLockedMessage } from "../utils/receiptStatus";
-import { aggregateDeltas, canDeleteReceiptStatus, findNegativeRollbackSkus } from "../utils/stockOps";
+import { assertReceiptLocationMatch } from "../utils/locationLock";
+import {
+  canAdjustSkuFromStatus,
+  canApplyFromStatus,
+  canRetirerStockFromStatus,
+  skuAdjustLockedMessage,
+} from "../utils/receiptStatus";
+import { aggregateDeltas, canDeleteReceiptStatus, invertJournalDeltas } from "../utils/stockOps";
 import { findExistingReceiptByOrder, isStrictDuplicateForOrder } from "../utils/receiptUniqueness";
 import { selectApplicableStockLines } from "../utils/stockValidation";
 import { isShopifyGid } from "../utils/validators";
@@ -34,6 +40,7 @@ import {
 
 type ReceiptStatus = "IMPORTED" | "READY" | "BLOCKED" | "APPLIED" | "ROLLED_BACK";
 type LineStatus = "RESOLVED" | "MISSING" | "SKIPPED";
+const inFlightReceiptOps = new Set<string>();
 
 export type ReceiptView = {
   gid: string;
@@ -92,6 +99,28 @@ function toNumber(value: string, fallback = 0) {
 
 function elapsedMs(startMs: number): number {
   return Date.now() - startMs;
+}
+
+function buildReceiptOpLockKey(shopDomain: string, receiptGid: string): string {
+  return `${shopDomain}:${receiptGid}`;
+}
+
+async function withReceiptOpLock<T>(
+  shopDomain: string,
+  receiptGid: string,
+  operation: "apply" | "rollback",
+  handler: () => Promise<T>,
+): Promise<T> {
+  const key = buildReceiptOpLockKey(shopDomain, receiptGid);
+  if (inFlightReceiptOps.has(key)) {
+    throw new Error(`Action "${operation}" déjà en cours pour cette réception. Réessayez dans quelques secondes.`);
+  }
+  inFlightReceiptOps.add(key);
+  try {
+    return await handler();
+  } finally {
+    inFlightReceiptOps.delete(key);
+  }
 }
 
 function parseJsonMap(value: string): Record<string, string> {
@@ -177,10 +206,18 @@ async function getExistingReceiptForOrder(
   return { receipt: existing.receipt, duplicateBy: existing.duplicateBy };
 }
 
-async function ensureReceiptImported(admin: AdminClient, shopDomain: string, order: PrestaOrder) {
+async function ensureReceiptImported(
+  admin: AdminClient,
+  shopDomain: string,
+  order: PrestaOrder,
+  locationId: string,
+) {
   const types = await getMetaTypes(admin);
   const existing = await getExistingReceiptForOrder(admin, shopDomain, order);
   if (existing && isStrictDuplicateForOrder(existing, order.id)) {
+    if (!existing.receipt.locationId) {
+      await updateMetaobject(admin, existing.receipt.gid, [{ key: "location_id", value: locationId }]);
+    }
     return existing.receipt.gid;
   }
 
@@ -194,7 +231,7 @@ async function ensureReceiptImported(admin: AdminClient, shopDomain: string, ord
     { key: "presta_order_id", value: String(order.id) },
     { key: "presta_reference", value: order.reference },
     { key: "status", value: "IMPORTED" },
-    { key: "location_id", value: "" },
+    { key: "location_id", value: locationId },
     { key: "skipped_skus", value: "[]" },
     { key: "errors", value: JSON.stringify(importWarnings) },
     { key: "applied_adjustment_gid", value: "" },
@@ -278,7 +315,7 @@ export async function syncRun(
     });
     if (!orders.length) break;
     for (const order of orders) {
-      await ensureReceiptImported(admin, shopDomain, order);
+      await ensureReceiptImported(admin, shopDomain, order, boutique.locationId);
       imported += 1;
       maxId = Math.max(maxId, order.id);
       if (imported >= env.syncMaxPerRun) break;
@@ -354,7 +391,7 @@ export async function importById(
       reference: order.reference,
     });
   }
-  const receiptGid = await ensureReceiptImported(admin, shopDomain, order);
+  const receiptGid = await ensureReceiptImported(admin, shopDomain, order, boutique.locationId);
   const syncState = await getSyncState(admin);
   const currentCursor = syncState.cursorByLocation[boutique.locationId] ?? 0;
   const lastPrestaOrderId = Math.max(currentCursor, order.id);
@@ -446,9 +483,7 @@ export async function prepareReceipt(
   if (!canAdjustSkuFromStatus(receipt.status)) {
     throw new Error(skuAdjustLockedMessage());
   }
-  if (receipt.locationId && receipt.locationId !== boutique.locationId) {
-    throw new Error("La boutique est verrouillée pour cette réception.");
-  }
+  assertReceiptLocationMatch(receipt.locationId, boutique.locationId);
   const skipped = new Set(receipt.skippedSkus);
   const skusToResolve = lines.filter((line) => !skipped.has(line.sku)).map((line) => line.sku);
   const resolved = await resolveSkus(admin, skusToResolve);
@@ -536,171 +571,176 @@ export async function applyReceipt(
     skippedSkus: string[];
   },
 ) {
-  const startedAt = Date.now();
-  const types = await getMetaTypes(admin);
-  const boutique = await resolveBoutiqueContext(admin, input.locationId);
-  if (!input.confirmed) {
-    throw new Error("Confirmation obligatoire.");
-  }
-  const { receipt } = await getReceiptDetail(admin, shopDomain, input.receiptGid);
-  if (receipt.status === "APPLIED") throw new Error("Cette réception a déjà été traitée.");
-  if (receipt.locationId && receipt.locationId !== boutique.locationId) {
-    throw new Error("La boutique est verrouillée pour cette réception.");
-  }
-  if (!canApplyFromStatus(receipt.status)) {
-    throw new Error("Diagnostic obligatoire: lancez 'Ajuster les SKU' pour passer la réception en statut prête.");
-  }
+  return withReceiptOpLock(shopDomain, input.receiptGid, "apply", async () => {
+    const startedAt = Date.now();
+    const types = await getMetaTypes(admin);
+    const boutique = await resolveBoutiqueContext(admin, input.locationId);
+    if (!input.confirmed) {
+      throw new Error("Confirmation obligatoire.");
+    }
+    const { receipt } = await getReceiptDetail(admin, shopDomain, input.receiptGid);
+    if (receipt.status === "APPLIED") throw new Error("Cette réception a déjà été traitée.");
+    if (!receipt.locationId) {
+      throw new Error("La boutique de la réception est absente. Relancez la préparation de la réception.");
+    }
+    assertReceiptLocationMatch(receipt.locationId, boutique.locationId);
+    if (!canApplyFromStatus(receipt.status)) {
+      throw new Error("Diagnostic obligatoire: lancez 'Ajuster les SKU' pour passer la réception en statut prête.");
+    }
 
-  if (input.skippedSkus.length) {
-    await updateMetaobject(admin, receipt.gid, [{ key: "skipped_skus", value: JSON.stringify(input.skippedSkus) }]);
-  }
-  const detail = await getReceiptDetail(admin, shopDomain, input.receiptGid);
-  const skipped = new Set(detail.receipt.skippedSkus);
-  const blocking = detail.lines.filter((line) => line.status === "MISSING" && !skipped.has(line.sku));
-  if (blocking.length) throw new Error(`Lignes bloquantes: ${blocking.map((b) => b.sku).join(", ")}`);
+    if (input.skippedSkus.length) {
+      await updateMetaobject(admin, receipt.gid, [{ key: "skipped_skus", value: JSON.stringify(input.skippedSkus) }]);
+    }
+    const detail = await getReceiptDetail(admin, shopDomain, input.receiptGid);
+    const skipped = new Set(detail.receipt.skippedSkus);
+    const blocking = detail.lines.filter((line) => line.status === "MISSING" && !skipped.has(line.sku));
+    if (blocking.length) throw new Error(`Lignes bloquantes: ${blocking.map((b) => b.sku).join(", ")}`);
 
-  const applyLines = selectApplicableStockLines(detail.lines, detail.receipt.skippedSkus);
-  if (!applyLines.length) {
-    throw new Error("Aucune ligne applicable. Ajustez les SKU ou retirez les lignes ignorées.");
-  }
-  const invalidInventoryIds = applyLines.filter((line) => !isShopifyGid(line.inventoryItemGid));
-  if (invalidInventoryIds.length) {
-    throw new Error(`Identifiants inventaire invalides: ${invalidInventoryIds.map((line) => line.sku).join(", ")}`);
-  }
-  const invalidQtyLines = applyLines.filter((line) => line.qty <= 0);
-  if (invalidQtyLines.length) {
-    throw new Error(`Quantités invalides (<= 0): ${invalidQtyLines.map((line) => line.sku).join(", ")}`);
-  }
-  const aggregated = aggregateDeltas(
-    applyLines.map((line) => ({
-      sku: line.sku,
-      inventoryItemId: line.inventoryItemGid,
-      delta: line.qty,
-    })),
-  );
+    const applyLines = selectApplicableStockLines(detail.lines, detail.receipt.skippedSkus);
+    if (!applyLines.length) {
+      throw new Error("Aucune ligne applicable. Ajustez les SKU ou retirez les lignes ignorées.");
+    }
+    const invalidInventoryIds = applyLines.filter((line) => !isShopifyGid(line.inventoryItemGid));
+    if (invalidInventoryIds.length) {
+      throw new Error(`Identifiants inventaire invalides: ${invalidInventoryIds.map((line) => line.sku).join(", ")}`);
+    }
+    const invalidQtyLines = applyLines.filter((line) => line.qty <= 0);
+    if (invalidQtyLines.length) {
+      throw new Error(`Quantités invalides (<= 0): ${invalidQtyLines.map((line) => line.sku).join(", ")}`);
+    }
+    const aggregated = aggregateDeltas(
+      applyLines.map((line) => ({
+        sku: line.sku,
+        inventoryItemId: line.inventoryItemGid,
+        delta: line.qty,
+      })),
+    );
+    if (!aggregated.length) {
+      throw new Error("Aucune ligne valide à appliquer.");
+    }
 
-  debugLog("apply receipt validation", {
-    receiptGid: detail.receipt.gid,
-    locationId: boutique.locationId,
-    applySkus: aggregated.map((line) => line.sku),
-    applyCount: aggregated.length,
-  });
-  await inventoryAdjustQuantities(
-    admin,
-    boutique.locationId,
-    aggregated.map((line) => ({ inventoryItemId: line.inventoryItemId, delta: line.delta })),
-  );
+    debugLog("apply receipt validation", {
+      receiptGid: detail.receipt.gid,
+      locationId: boutique.locationId,
+      applySkus: aggregated.map((line) => line.sku),
+      applyCount: aggregated.length,
+    });
+    await inventoryAdjustQuantities(
+      admin,
+      boutique.locationId,
+      aggregated.map((line) => ({ inventoryItemId: line.inventoryItemId, delta: line.delta })),
+    );
 
-  const adjustmentGid = await upsertMetaobjectByHandle(
-    admin,
-    types.adjustment,
-    `adjustment-${detail.receipt.prestaOrderId}-${Date.now()}`,
-    [
-      { key: "receipt_gid", value: detail.receipt.gid },
-      { key: "location_id", value: boutique.locationId },
-      { key: "status", value: "APPLIED" },
-      { key: "applied_at", value: toShopifyNowDateTime() },
-    ],
-  );
+    const adjustmentGid = await upsertMetaobjectByHandle(
+      admin,
+      types.adjustment,
+      `adjustment-${detail.receipt.prestaOrderId}-${Date.now()}`,
+      [
+        { key: "receipt_gid", value: detail.receipt.gid },
+        { key: "location_id", value: boutique.locationId },
+        { key: "status", value: "APPLIED" },
+        { key: "applied_at", value: toShopifyNowDateTime() },
+      ],
+    );
 
-  await Promise.all(
-    aggregated.map((line, idx) =>
-      upsertMetaobjectByHandle(
-        admin,
-        types.adjustmentLine,
-        `adjustment-line-${detail.receipt.prestaOrderId}-${idx}-${line.sku.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40)}`,
-        [
-          { key: "adjustment_gid", value: adjustmentGid },
-          { key: "sku", value: line.sku },
-          { key: "qty_delta", value: String(line.delta) },
-          { key: "inventory_item_gid", value: line.inventoryItemId },
-        ],
+    await Promise.all(
+      aggregated.map((line, idx) =>
+        upsertMetaobjectByHandle(
+          admin,
+          types.adjustmentLine,
+          `adjustment-line-${detail.receipt.prestaOrderId}-${idx}-${line.sku.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40)}`,
+          [
+            { key: "adjustment_gid", value: adjustmentGid },
+            { key: "sku", value: line.sku },
+            { key: "qty_delta", value: String(line.delta) },
+            { key: "inventory_item_gid", value: line.inventoryItemId },
+          ],
+        ),
       ),
-    ),
-  );
+    );
 
-  await updateMetaobject(admin, detail.receipt.gid, [
-    { key: "status", value: "APPLIED" },
-    { key: "location_id", value: boutique.locationId },
-    { key: "applied_adjustment_gid", value: adjustmentGid },
-  ]);
-  debugLog("apply receipt done", {
-    shop: shopDomain,
-    receiptGid: detail.receipt.gid,
-    locationId: boutique.locationId,
-    appliedLines: aggregated.length,
-    elapsedMs: elapsedMs(startedAt),
+    await updateMetaobject(admin, detail.receipt.gid, [
+      { key: "status", value: "APPLIED" },
+      { key: "location_id", value: boutique.locationId },
+      { key: "applied_adjustment_gid", value: adjustmentGid },
+    ]);
+    debugLog("apply receipt done", {
+      shop: shopDomain,
+      receiptGid: detail.receipt.gid,
+      locationId: boutique.locationId,
+      appliedLines: aggregated.length,
+      elapsedMs: elapsedMs(startedAt),
+    });
   });
 }
 
 export async function rollbackReceipt(admin: AdminClient, shopDomain: string, receiptGid: string) {
-  const startedAt = Date.now();
-  const types = await getMetaTypes(admin);
-  const { receipt } = await getReceiptDetail(admin, shopDomain, receiptGid);
-  if (!receipt.appliedAdjustmentGid) throw new Error("Aucun ajustement appliqué pour cette réception.");
+  return withReceiptOpLock(shopDomain, receiptGid, "rollback", async () => {
+    const startedAt = Date.now();
+    const types = await getMetaTypes(admin);
+    const { receipt } = await getReceiptDetail(admin, shopDomain, receiptGid);
+    if (!canRetirerStockFromStatus(receipt.status)) {
+      throw new Error("Retrait impossible: la réception n'est pas en statut APPLIED.");
+    }
+    if (!receipt.appliedAdjustmentGid) throw new Error("Aucun ajustement appliqué pour cette réception.");
 
-  const adjustmentNodes = await listMetaobjects(admin, types.adjustment);
-  const adjustment = adjustmentNodes.find((node) => node.id === receipt.appliedAdjustmentGid);
-  if (!adjustment) throw new Error("Ajustement introuvable.");
-  if (fieldValue(adjustment, "status") === "ROLLED_BACK") {
-    throw new Error("Le stock a déjà été retiré pour cette réception.");
-  }
+    const adjustmentNodes = await listMetaobjects(admin, types.adjustment);
+    const adjustment = adjustmentNodes.find((node) => node.id === receipt.appliedAdjustmentGid);
+    if (!adjustment) throw new Error("Ajustement introuvable.");
+    if (fieldValue(adjustment, "status") === "ROLLED_BACK") {
+      throw new Error("Le stock a déjà été retiré pour cette réception.");
+    }
+    if (fieldValue(adjustment, "receipt_gid") !== receipt.gid) {
+      throw new Error("Ajustement incohérent pour cette réception.");
+    }
 
-  const locationId = fieldValue(adjustment, "location_id");
-  if (!isShopifyGid(locationId)) {
-    throw new Error("Identifiant de boutique invalide sur l'ajustement.");
-  }
-  const adjustmentLines = (await listMetaobjects(admin, types.adjustmentLine))
-    .filter((node) => fieldValue(node, "adjustment_gid") === receipt.appliedAdjustmentGid)
-    .map((node) => ({
-      sku: fieldValue(node, "sku"),
-      inventoryItemId: fieldValue(node, "inventory_item_gid"),
-      delta: -toNumber(fieldValue(node, "qty_delta")),
-    }));
-  if (!adjustmentLines.length) {
-    throw new Error("Aucune ligne d'ajustement à annuler.");
-  }
-  const invalidAdjustmentLines = adjustmentLines.filter(
-    (line) => !isShopifyGid(line.inventoryItemId) || line.delta >= 0,
-  );
-  if (invalidAdjustmentLines.length) {
-    throw new Error("Lignes d'ajustement invalides.");
-  }
-
-  const currentStocks = await getStockOnLocation(
-    admin,
-    adjustmentLines.map((line) => line.inventoryItemId),
-    locationId,
-  );
-  const negativeSkus = findNegativeRollbackSkus(currentStocks, adjustmentLines);
-  if (negativeSkus.length) {
-    throw new Error(
-      `Retrait refusé: stock insuffisant pour ${negativeSkus.join(", ")}`,
+    const locationId = fieldValue(adjustment, "location_id");
+    if (!isShopifyGid(locationId)) {
+      throw new Error("Identifiant de boutique invalide sur l'ajustement.");
+    }
+    assertReceiptLocationMatch(receipt.locationId, locationId);
+    const journalLines = (await listMetaobjects(admin, types.adjustmentLine))
+      .filter((node) => fieldValue(node, "adjustment_gid") === receipt.appliedAdjustmentGid)
+      .map((node) => ({
+        sku: fieldValue(node, "sku"),
+        inventoryItemId: fieldValue(node, "inventory_item_gid"),
+        qtyDelta: toNumber(fieldValue(node, "qty_delta")),
+      }));
+    if (!journalLines.length) {
+      throw new Error("Aucune ligne d'ajustement à annuler.");
+    }
+    const adjustmentLines = invertJournalDeltas(journalLines);
+    const invalidAdjustmentLines = adjustmentLines.filter(
+      (line) => !isShopifyGid(line.inventoryItemId) || line.delta >= 0,
     );
-  }
-  debugLog("rollback receipt validation", {
-    receiptGid: receipt.gid,
-    locationId,
-    rollbackSkus: adjustmentLines.map((line) => line.sku),
-    rollbackCount: adjustmentLines.length,
-  });
+    if (invalidAdjustmentLines.length) {
+      throw new Error("Lignes d'ajustement invalides.");
+    }
 
-  await inventoryAdjustQuantities(
-    admin,
-    locationId,
-    adjustmentLines.map((line) => ({ inventoryItemId: line.inventoryItemId, delta: line.delta })),
-  );
-  await updateMetaobject(admin, adjustment.id, [
-    { key: "status", value: "ROLLED_BACK" },
-    { key: "rolled_back_at", value: toShopifyNowDateTime() },
-  ]);
-  await updateMetaobject(admin, receipt.gid, [{ key: "status", value: "ROLLED_BACK" }]);
-  debugLog("rollback receipt done", {
-    shop: shopDomain,
-    receiptGid: receipt.gid,
-    locationId,
-    lines: adjustmentLines.length,
-    elapsedMs: elapsedMs(startedAt),
+    debugLog("rollback receipt validation", {
+      receiptGid: receipt.gid,
+      locationId,
+      rollbackSkus: adjustmentLines.map((line) => line.sku),
+      rollbackCount: adjustmentLines.length,
+    });
+
+    await inventoryAdjustQuantities(
+      admin,
+      locationId,
+      adjustmentLines.map((line) => ({ inventoryItemId: line.inventoryItemId, delta: line.delta })),
+    );
+    await updateMetaobject(admin, adjustment.id, [
+      { key: "status", value: "ROLLED_BACK" },
+      { key: "rolled_back_at", value: toShopifyNowDateTime() },
+    ]);
+    await updateMetaobject(admin, receipt.gid, [{ key: "status", value: "ROLLED_BACK" }]);
+    debugLog("rollback receipt done", {
+      shop: shopDomain,
+      receiptGid: receipt.gid,
+      locationId,
+      lines: adjustmentLines.length,
+      elapsedMs: elapsedMs(startedAt),
+    });
   });
 }
 

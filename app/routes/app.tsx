@@ -2,7 +2,7 @@ import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { Outlet, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider as EmbeddedAppProvider } from "@shopify/shopify-app-react-router/react";
-import { AppProvider as PolarisAppProvider, Frame } from "@shopify/polaris";
+import { AppProvider as PolarisAppProvider, Box, Frame, InlineStack, Link, Text } from "@shopify/polaris";
 import frTranslations from "@shopify/polaris/locales/fr.json";
 
 import { authenticate } from "../shopify.server";
@@ -21,7 +21,24 @@ export default function App() {
     <EmbeddedAppProvider embedded apiKey={apiKey}>
       <PolarisAppProvider i18n={frTranslations}>
         <Frame>
-          <Outlet />
+          <Box minHeight="100vh" paddingBlockEnd="800">
+            <Outlet />
+            <Box paddingBlockStart="1000" paddingBlockEnd="900">
+              <InlineStack align="center" blockAlign="center" gap="200">
+                <img src="/logo-woora.png" alt="Woora" style={{ width: "180px", height: "auto" }} />
+              </InlineStack>
+              <Box paddingBlockStart="300">
+                <InlineStack align="center">
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Application développée par{" "}
+                  <Link url="mailto:contact@woora.fr" removeUnderline>
+                    Woora
+                  </Link>
+                </Text>
+                </InlineStack>
+              </Box>
+            </Box>
+          </Box>
         </Frame>
       </PolarisAppProvider>
     </EmbeddedAppProvider>

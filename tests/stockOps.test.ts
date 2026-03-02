@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import {
   aggregateDeltas,
   canDeleteReceiptStatus,
-  findNegativeRollbackSkus,
   isDuplicateApplyStatus,
 } from "../app/utils/stockOps";
 
@@ -28,17 +27,14 @@ test("isDuplicateApplyStatus bloque un second apply", () => {
   assert.equal(isDuplicateApplyStatus("BLOCKED"), true);
 });
 
-test("findNegativeRollbackSkus detecte les SKU qui passeraient en negatif", () => {
-  const current = new Map<string, number>([
-    ["gid://shopify/InventoryItem/1", 4],
-    ["gid://shopify/InventoryItem/2", 0],
-  ]);
-  const rollbackLines = [
-    { sku: "ABBISRED", inventoryItemId: "gid://shopify/InventoryItem/1", delta: -2 },
-    { sku: "ERINXSWHI", inventoryItemId: "gid://shopify/InventoryItem/2", delta: -1 },
+test("aggregateDeltas conserve les deltas negatifs (rollback vers stock negatif autorise)", () => {
+  const lines = [
+    { sku: "ABBISRED", inventoryItemId: "gid://shopify/InventoryItem/1", delta: -1 },
+    { sku: "ABBISRED", inventoryItemId: "gid://shopify/InventoryItem/1", delta: 0 },
   ];
-  const negativeSkus = findNegativeRollbackSkus(current, rollbackLines);
-  assert.deepEqual(negativeSkus, ["ERINXSWHI"]);
+  const aggregated = aggregateDeltas(lines);
+  assert.equal(aggregated.length, 1);
+  assert.equal(aggregated[0]?.delta, -1);
 });
 
 test("canDeleteReceiptStatus interdit suppression apres application", () => {

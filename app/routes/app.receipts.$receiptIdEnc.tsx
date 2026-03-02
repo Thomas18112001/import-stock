@@ -24,7 +24,6 @@ import { listLocations } from "../services/shopifyGraphql";
 import { getSyncState } from "../services/shopifyMetaobjects";
 import { getReceiptDetail, getReceiptStocks, getSkuDiagnostics } from "../services/receiptService";
 import { debugLog } from "../utils/debug";
-import { isLocationLockedForReceipt } from "../utils/locationLock";
 import { decodeReceiptIdFromUrl, encodeReceiptIdForUrl } from "../utils/receiptId";
 import { canAdjustSkuFromStatus, canRetirerStockFromStatus, skuAdjustLockedMessage } from "../utils/receiptStatus";
 import { MissingShopifyScopeError } from "../utils/shopifyScopeErrors";
@@ -216,7 +215,6 @@ export default function ReceiptDetailPage() {
     invalidQtyLines.length === 0 &&
     eligibleLines.length > 0 &&
     applyFetcher.state === "idle";
-  const locationLocked = isLocationLockedForReceipt(data.receipt.status, data.receipt.locationId);
   const canAdjustSku = canAdjustSkuFromStatus(data.receipt.status);
   const locationName = data.locations.find((loc) => loc.id === locationId)?.name ?? "Non définie";
   const isLoading = navigation.state !== "idle";
@@ -338,16 +336,11 @@ export default function ReceiptDetailPage() {
                 <Select
                   label="Sélectionner la boutique"
                   value={locationId}
-                  onChange={(value) => {
-                    if (locationLocked) return;
-                    setLocationId(value);
-                  }}
+                  onChange={(value) => setLocationId(value)}
                   options={data.locations.map((loc) => ({ value: loc.id, label: loc.name }))}
-                  disabled={locationLocked}
+                  disabled
                 />
-                {locationLocked ? (
-                  <Banner tone="info">La boutique est verrouillée pour cette réception pendant le flux de validation.</Banner>
-                ) : null}
+                <Banner tone="info">La boutique est verrouillée pour cette réception.</Banner>
                 <Divider />
                 <Text as="p" variant="bodyMd">
                   Modifications à appliquer:

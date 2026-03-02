@@ -1,6 +1,8 @@
 import type { ActionFunctionArgs } from "react-router";
+import { assertActionRateLimit, getClientIp } from "../services/action-guard.server";
 import { requireAdmin } from "../services/auth.server";
 import { rollbackReceipt } from "../services/receiptService";
+import { toPublicErrorMessage } from "../utils/error.server";
 import { decodeReceiptId } from "../utils/receiptId";
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
@@ -14,11 +16,12 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   }
   const { admin, shop } = await requireAdmin(request);
   try {
+    assertActionRateLimit("rollback", shop, getClientIp(request), 5_000);
     await rollbackReceipt(admin, shop, receiptGid);
     return Response.json({ ok: true });
   } catch (error) {
     return Response.json(
-      { ok: false, error: error instanceof Error ? error.message : "Erreur de retrait du stock." },
+      { ok: false, error: toPublicErrorMessage(error, "Erreur de retrait du stock.") },
       { status: 400 },
     );
   }

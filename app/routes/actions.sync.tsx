@@ -1,7 +1,9 @@
 import type { ActionFunctionArgs } from "react-router";
+import { assertActionRateLimit, getClientIp } from "../services/action-guard.server";
 import { requireAdmin } from "../services/auth.server";
 import { assertManualSyncRateLimit } from "../services/manual-sync-guard.server";
 import { syncRun } from "../services/receiptService";
+import { toPublicErrorMessage } from "../utils/error.server";
 import { isShopifyGid } from "../utils/validators";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -12,6 +14,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return Response.json({ ok: false, error: "Sélection de la boutique invalide." }, { status: 400 });
   }
   try {
+    assertActionRateLimit("sync", shop, getClientIp(request), 5_000);
     assertManualSyncRateLimit(shop);
     const result = await syncRun(admin, shop, true, locationId);
     return Response.json({
@@ -23,7 +26,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
   } catch (error) {
     return Response.json(
-      { ok: false, error: error instanceof Error ? error.message : "Erreur de synchronisation." },
+      { ok: false, error: toPublicErrorMessage(error, "Erreur de synchronisation.") },
       { status: 400 },
     );
   }

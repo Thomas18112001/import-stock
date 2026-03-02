@@ -7,7 +7,7 @@ export class MissingShopifyScopeError extends Error {
   constructor(missingScope: string, operation?: string, message?: string) {
     super(
       message ??
-        `Autorisation manquante: ${missingScope}. Reinstallez l'application pour appliquer les nouveaux droits.`,
+        `Autorisation manquante: ${missingScope}. Réinstallez l'application pour appliquer les nouveaux droits.`,
     );
     this.name = "MissingShopifyScopeError";
     this.missingScope = missingScope;
@@ -31,11 +31,10 @@ export function toMissingScopeError(error: unknown, operation?: string): Missing
   return new MissingShopifyScopeError(
     missingScope,
     operation,
-    `Autorisation manquante: ${missingScope}. Reinstallez l'application pour appliquer les nouveaux droits.`,
+    `Autorisation manquante: ${missingScope}. Réinstallez l'application pour appliquer les nouveaux droits.`,
   );
 }
 
 export function listExpectedScopesForLogs(): string {
   return REQUIRED_SHOPIFY_SCOPES.join(",");
 }
-
