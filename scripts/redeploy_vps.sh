@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_DIR="/var/www/import-stock-wearmoi"
+APP_DIR="/var/www/shopify-app-migration"
 SERVICE_NAME="import-stock-wearmoi"
 NGINX_SITE="/etc/nginx/sites-available/import-stock.woora.fr"
 NGINX_LINK="/etc/nginx/sites-enabled/import-stock.woora.fr"

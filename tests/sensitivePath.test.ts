@@ -11,6 +11,6 @@ test("bloque les chemins sensibles", () => {
 
 test("autorise les chemins applicatifs standards", () => {
   assert.equal(isSensitiveRequestPath("/app"), false);
-  assert.equal(isSensitiveRequestPath("/actions/sync"), false);
+  assert.equal(isSensitiveRequestPath("/actions/synchroniser"), false);
   assert.equal(isSensitiveRequestPath("/favicon.ico"), false);
 });

@@ -1,6 +1,6 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "8445df38113361a904c111346e1a2698"
+client_id = "2be9bf4209c861fced9c18fdb37c6861"
 name = "Import Stock Boutique DEV"
 application_url = "https://example.com"
 embedded = true
@@ -10,7 +10,11 @@ api_version = "2026-04"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_inventory,read_locations,read_metaobject_definitions,read_metaobjects,read_products,write_inventory,write_metaobject_definitions,write_metaobjects"
+scopes = "read_metaobject_definitions,write_metaobject_definitions,read_metaobjects,write_metaobjects,read_inventory,read_locations,read_products,write_inventory"
 
 [auth]
 redirect_urls = [ "https://example.com/api/auth" ]
+
+[build]
+automatically_update_urls_on_dev = true
+

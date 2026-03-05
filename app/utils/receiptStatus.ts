@@ -1,9 +1,13 @@
-export function canApplyFromStatus(status: string): boolean {
+﻿export function canApplyFromStatus(status: string): boolean {
   return status === "READY";
 }
 
 export function canAdjustSkuFromStatus(status: string): boolean {
-  return status !== "APPLIED";
+  return status !== "APPLIED" && status !== "INCOMING";
+}
+
+export function canReceiveFromStatus(status: string): boolean {
+  return status === "INCOMING";
 }
 
 export function canRetirerStockFromStatus(status: string): boolean {
@@ -11,5 +15,7 @@ export function canRetirerStockFromStatus(status: string): boolean {
 }
 
 export function skuAdjustLockedMessage(): string {
-  return "Le stock a déjà été ajouté. Les SKU ne peuvent plus être modifiés. Utilisez « Retirer le stock » si vous devez corriger.";
+  return "La réception est déjà en cours d'arrivage ou validée. Les SKU ne peuvent plus être modifiés.";
 }
+
+

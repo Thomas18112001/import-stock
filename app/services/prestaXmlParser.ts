@@ -9,6 +9,7 @@ export type PrestaOrder = {
   id: number;
   customerId: number;
   reference: string;
+  currentState: string;
   dateAdd: string;
   dateUpd: string;
 };
@@ -38,6 +39,7 @@ function parseOrderNode(node: unknown): PrestaOrder {
   const id = Number(getText(rec.id));
   const customerId = Number(getText(rec.id_customer));
   const reference = getText(rec.reference);
+  const currentState = getText(rec.current_state);
   const dateAdd = getText(rec.date_add);
   const dateUpd = getText(rec.date_upd);
 
@@ -48,7 +50,7 @@ function parseOrderNode(node: unknown): PrestaOrder {
     throw new PrestaParsingError(`Invalid Presta order customer id: ${getText(rec.id_customer)}`);
   }
 
-  return { id, customerId, reference, dateAdd, dateUpd };
+  return { id, customerId, reference, currentState, dateAdd, dateUpd };
 }
 
 export function parseOrdersListXml(payload: XmlRecord): PrestaOrder[] {

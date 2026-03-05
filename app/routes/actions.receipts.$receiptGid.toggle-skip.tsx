@@ -1,4 +1,4 @@
-import type { ActionFunctionArgs } from "react-router";
+﻿import type { ActionFunctionArgs } from "react-router";
 import { requireAdmin } from "../services/auth.server";
 import { toggleSkip } from "../services/receiptService";
 import { toPublicErrorMessage } from "../utils/error.server";
@@ -31,3 +31,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     );
   }
 };
+
+
+

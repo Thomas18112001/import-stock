@@ -1,4 +1,4 @@
-import type { ActionFunctionArgs } from "react-router";
+﻿import type { ActionFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 import { requireAdmin } from "../services/auth.server";
 import { deleteReceipt } from "../services/receiptService";
@@ -22,7 +22,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   try {
     await deleteReceipt(admin, shop, receiptGid, confirmed);
     if (redirectToList) {
-      return redirect("/app/receipts?deleted=1");
+      return redirect("/produits-en-reception?deleted=1");
     }
     return Response.json({ ok: true, deletedGid: receiptGid });
   } catch (error) {
@@ -32,3 +32,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     );
   }
 };
+
+
+
+

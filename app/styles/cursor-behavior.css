@@ -1,0 +1,21 @@
+.wm-app,
+.wm-app * {
+  cursor: default !important;
+}
+
+.wm-app a,
+.wm-app button,
+.wm-app [role="button"],
+.wm-app input[type="checkbox"],
+.wm-app input[type="radio"],
+.wm-app select,
+.wm-app summary,
+.wm-app label[for] {
+  cursor: pointer !important;
+}
+
+.wm-app input:not([type="checkbox"]):not([type="radio"]),
+.wm-app textarea,
+.wm-app [contenteditable="true"] {
+  cursor: text !important;
+}

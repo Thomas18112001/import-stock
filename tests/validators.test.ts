@@ -24,7 +24,8 @@ test("sanitizeSearchQuery supprime les caracteres risques", () => {
 test("normalizeSku and isValidSku", () => {
   assert.equal(normalizeSku("  ABBISRED  "), "ABBISRED");
   assert.equal(isValidSku("ABBISRED"), true);
-  assert.equal(isValidSku("BAD SKU"), false);
+  assert.equal(isValidSku("BAD SKU"), true);
+  assert.equal(isValidSku("BAD\nSKU"), false);
 });
 
 test("isShopifyGid verifie le format gid Shopify", () => {

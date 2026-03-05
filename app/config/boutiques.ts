@@ -1,4 +1,4 @@
-export type BoutiqueMapping = {
+﻿export type BoutiqueMapping = {
   key: string;
   shopifyLocationName: string;
   prestaCustomerId: number | null;
@@ -32,3 +32,4 @@ export function canSyncLocation(locationName: string): boolean {
 export function buildMissingPrestaConfigMessage(locationName: string): string {
   return `La boutique "${locationName}" n'est pas encore configurée pour Prestashop BtoB. Configurez l'identifiant client avant de synchroniser.`;
 }
+

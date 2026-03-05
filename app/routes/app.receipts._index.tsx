@@ -33,16 +33,18 @@ import { makeTraceId } from "../utils/trace";
 import { sanitizeSearchQuery, sanitizeSort } from "../utils/validators";
 
 function statusLabel(status: string): string {
-  if (status === "IMPORTED") return "Importée";
-  if (status === "READY") return "Prête";
-  if (status === "BLOCKED") return "Bloquée";
-  if (status === "APPLIED") return "Stock ajouté";
-  if (status === "ROLLED_BACK") return "Stock retiré";
+  if (status === "IMPORTED") return "À vérifier";
+  if (status === "READY") return "Prête pour arrivage";
+  if (status === "BLOCKED") return "Bloquée (SKU à corriger)";
+  if (status === "INCOMING") return "En cours d'arrivage";
+  if (status === "APPLIED") return "Reçue en boutique";
+  if (status === "ROLLED_BACK") return "Réception annulée";
   return status;
 }
 
 function badgeTone(status: string): "info" | "success" | "critical" | "warning" {
   if (status === "READY") return "success";
+  if (status === "INCOMING") return "warning";
   if (status === "APPLIED") return "success";
   if (status === "BLOCKED") return "critical";
   if (status === "ROLLED_BACK") return "warning";
@@ -53,12 +55,25 @@ function cityLabelFromLocationName(name: string): string {
   return name.replace(/^Boutique\s+/i, "").trim() || name;
 }
 
+function toSortableMs(raw: string): number {
+  const trimmed = raw.trim();
+  if (!trimmed) return 0;
+  const normalized = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(trimmed) ? `${trimmed}Z` : trimmed;
+  const ms = Date.parse(normalized);
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function receiptSortTimestamp(receipt: { prestaDateAdd: string; prestaDateUpd?: string }): number {
+  return Math.max(toSortableMs(receipt.prestaDateUpd ?? ""), toSortableMs(receipt.prestaDateAdd));
+}
+
 type ReceiptRow = {
   gid: string;
   prestaOrderId: number;
   prestaReference: string;
   status: string;
   prestaDateAdd: string;
+  prestaDateUpd?: string;
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -85,7 +100,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
   const { admin, shop } = adminShop;
 
-  const allowedStatuses = ["", "IMPORTED", "READY", "BLOCKED", "APPLIED", "ROLLED_BACK"];
+  const allowedStatuses = ["", "IMPORTED", "READY", "BLOCKED", "INCOMING", "APPLIED", "ROLLED_BACK"];
   const allowedSorts = ["date_desc", "date_asc", "id_desc", "id_asc"];
   const rawStatus = url.searchParams.get("status") ?? "";
   const status = allowedStatuses.includes(rawStatus) ? rawStatus : "";
@@ -112,7 +127,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     const boutiqueMapping = selectedLocation ? getBoutiqueMappingByLocationName(selectedLocation.name) : null;
     const locationConfigured = Boolean(boutiqueMapping?.prestaCustomerId);
-    const configurationMessage = selectedLocation && !locationConfigured ? buildMissingPrestaConfigMessage(selectedLocation.name) : null;
+    const configurationMessage =
+      selectedLocation && !locationConfigured ? buildMissingPrestaConfigMessage(selectedLocation.name) : null;
 
     const includeLegacyUnassigned =
       selectedLocation?.name?.trim().toLowerCase() === env.shopifyDefaultLocationName.trim().toLowerCase();
@@ -130,10 +146,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     });
 
     const sorted = [...filtered].sort((a, b) => {
-      if (sort === "date_asc") return a.prestaDateAdd.localeCompare(b.prestaDateAdd);
+      if (sort === "date_asc") {
+        const dateDelta = receiptSortTimestamp(a) - receiptSortTimestamp(b);
+        if (dateDelta !== 0) return dateDelta;
+        return a.prestaOrderId - b.prestaOrderId;
+      }
       if (sort === "id_asc") return a.prestaOrderId - b.prestaOrderId;
       if (sort === "id_desc") return b.prestaOrderId - a.prestaOrderId;
-      return b.prestaDateAdd.localeCompare(a.prestaDateAdd);
+      const dateDelta = receiptSortTimestamp(b) - receiptSortTimestamp(a);
+      if (dateDelta !== 0) return dateDelta;
+      return b.prestaOrderId - a.prestaOrderId;
     });
 
     return {
@@ -204,7 +226,9 @@ export default function ReceiptsPage() {
   const [query, setQuery] = useState(data.q);
   const [status, setStatus] = useState(data.status);
   const [sort, setSort] = useState(data.sort);
-  const [toast, setToast] = useState<{ content: string; error?: boolean } | null>(data.deleted ? { content: "Réception supprimée." } : null);
+  const [toast, setToast] = useState<{ content: string; error?: boolean } | null>(
+    data.deleted ? { content: "Réception supprimée." } : null,
+  );
   const [deleteTarget, setDeleteTarget] = useState<ReceiptRow | null>(null);
   const [deletingGid, setDeletingGid] = useState<string | null>(null);
 
@@ -235,7 +259,7 @@ export default function ReceiptsPage() {
   const deleting = deleteFetcher.state !== "idle";
 
   const applyFilters = () => {
-    const path = `/app/receipts?q=${encodeURIComponent(query)}&status=${encodeURIComponent(status)}&sort=${encodeURIComponent(sort)}`;
+    const path = `/produits-en-reception?q=${encodeURIComponent(query)}&status=${encodeURIComponent(status)}&sort=${encodeURIComponent(sort)}`;
     const result = embeddedNavigate(path);
     if (!result.ok) {
       setToast({ content: "Navigation impossible.", error: true });
@@ -264,7 +288,7 @@ export default function ReceiptsPage() {
                     const traceId = makeTraceId();
                     const receiptIdRaw = receipt.gid;
                     const receiptIdEnc = encodeReceiptIdForUrl(receiptIdRaw);
-                    const path = `/app/receipts/${receiptIdEnc}?trace=${encodeURIComponent(traceId)}`;
+                    const path = `/produits-en-reception/${receiptIdEnc}?trace=${encodeURIComponent(traceId)}`;
                     if (data.debug) {
                       console.info("[debug] click ouvrir receipts", {
                         traceId,
@@ -302,7 +326,7 @@ export default function ReceiptsPage() {
   return (
     <Page
       title={`Réceptions commandes boutique ${data.locationCity}`}
-      backAction={{ content: "Tableau de bord", onAction: () => embeddedNavigate("/app") }}
+      backAction={{ content: "Tableau de bord", onAction: () => embeddedNavigate("/") }}
     >
       {toast ? <Toast content={toast.content} error={toast.error} onDismiss={() => setToast(null)} /> : null}
 
@@ -314,7 +338,7 @@ export default function ReceiptsPage() {
                 {data.scopeIssue.message}
               </Text>
               <InlineStack>
-                <Button submit={false} onClick={() => embeddedNavigate("/app/help/scopes")}>
+                <Button submit={false} onClick={() => embeddedNavigate("/aide-autorisations")}>
                   Voir la procédure
                 </Button>
               </InlineStack>
@@ -344,11 +368,12 @@ export default function ReceiptsPage() {
                 onChange={setStatus}
                 options={[
                   { label: "Tous", value: "" },
-                  { label: "Importée", value: "IMPORTED" },
-                  { label: "Prête", value: "READY" },
-                  { label: "Bloquée", value: "BLOCKED" },
-                  { label: "Stock ajouté", value: "APPLIED" },
-                  { label: "Stock retiré", value: "ROLLED_BACK" },
+                  { label: "À vérifier", value: "IMPORTED" },
+                  { label: "Prête pour arrivage", value: "READY" },
+                  { label: "Bloquée (SKU à corriger)", value: "BLOCKED" },
+                  { label: "En cours d'arrivage", value: "INCOMING" },
+                  { label: "Reçue en boutique", value: "APPLIED" },
+                  { label: "Réception annulée", value: "ROLLED_BACK" },
                 ]}
               />
               <Select
@@ -399,7 +424,7 @@ export default function ReceiptsPage() {
             disabled={data.stack.length === 0}
             onClick={() =>
               embeddedNavigate(
-                `/app/receipts?q=${encodeURIComponent(data.q)}&status=${encodeURIComponent(
+                `/produits-en-reception?q=${encodeURIComponent(data.q)}&status=${encodeURIComponent(
                   data.status,
                 )}&sort=${encodeURIComponent(data.sort)}&cursor=${encodeURIComponent(prevCursor)}&stack=${encodeURIComponent(
                   prevStack,
@@ -413,7 +438,7 @@ export default function ReceiptsPage() {
             disabled={!data.pageInfo.hasNextPage || !data.pageInfo.endCursor}
             onClick={() =>
               embeddedNavigate(
-                `/app/receipts?q=${encodeURIComponent(data.q)}&status=${encodeURIComponent(
+                `/produits-en-reception?q=${encodeURIComponent(data.q)}&status=${encodeURIComponent(
                   data.status,
                 )}&sort=${encodeURIComponent(data.sort)}&cursor=${encodeURIComponent(
                   data.pageInfo.endCursor ?? "",
@@ -437,7 +462,7 @@ export default function ReceiptsPage() {
         primaryAction={{
           content: "Supprimer",
           destructive: true,
-          disabled: deleting || deleteTarget?.status === "APPLIED",
+          disabled: deleting || deleteTarget?.status === "APPLIED" || deleteTarget?.status === "INCOMING",
           loading: deleting,
           onAction: () => {
             if (!deleteTarget) return;
@@ -446,7 +471,7 @@ export default function ReceiptsPage() {
             formData.set("confirmed", "true");
             deleteFetcher.submit(formData, {
               method: "post",
-              action: `/actions/receipts/${encodeReceiptIdForUrl(deleteTarget.gid)}/delete`,
+              action: `/actions/produits-en-reception/${encodeReceiptIdForUrl(deleteTarget.gid)}/supprimer`,
             });
           },
         }}
@@ -463,7 +488,7 @@ export default function ReceiptsPage() {
         <Modal.Section>
           <BlockStack gap="300">
             <Text as="p" variant="bodyMd">
-              Cette action supprime l&apos;import. Si le stock a déjà été ajouté, retirez d&apos;abord le stock.
+              Cette action supprime l&apos;import. Si un flux de stock est en cours ou appliqué, terminez/annulez-le d&apos;abord.
             </Text>
           </BlockStack>
         </Modal.Section>

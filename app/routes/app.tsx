@@ -1,25 +1,65 @@
+﻿import { useEffect, useState } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { Outlet, useLoaderData, useRouteError } from "react-router";
+import { Outlet, useLoaderData, useLocation, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider as EmbeddedAppProvider } from "@shopify/shopify-app-react-router/react";
-import { AppProvider as PolarisAppProvider, Box, Frame, InlineStack, Link, Text } from "@shopify/polaris";
+import { NavMenu } from "@shopify/app-bridge-react";
+import { AppProvider as PolarisAppProvider, Box, Button, Frame, InlineStack, Text } from "@shopify/polaris";
 import frTranslations from "@shopify/polaris/locales/fr.json";
 
+import { AppLoader } from "../components/AppLoader";
 import { authenticate } from "../shopify.server";
+import { withEmbeddedContext } from "../utils/embeddedPath";
+import "../styles/app-loader.css";
+import "../styles/cursor-behavior.css";
+
+const CONTACT_EMAIL = "contact@woora.fr";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
-
-  // eslint-disable-next-line no-undef
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };
 };
 
+function openMailClient() {
+  const mailto = `mailto:${CONTACT_EMAIL}`;
+  if (typeof window === "undefined") return;
+  try {
+    if (window.top) {
+      window.top.location.href = mailto;
+      return;
+    }
+  } catch {
+    // Fallback below.
+  }
+  window.location.href = mailto;
+}
+
 export default function App() {
   const { apiKey } = useLoaderData<typeof loader>();
+  const location = useLocation();
+  const [isBooting, setIsBooting] = useState(true);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setIsBooting(false), 280);
+    return () => window.clearTimeout(timeout);
+  }, []);
+
+  const showLoader = isBooting;
+  const navHref = (path: string) => withEmbeddedContext(path, location.search, location.pathname);
 
   return (
     <EmbeddedAppProvider embedded apiKey={apiKey}>
       <PolarisAppProvider i18n={frTranslations}>
+        <div className="wm-app">
+        <NavMenu>
+          <a href={navHref("/tableau-de-bord")}>Tableau de bord</a>
+          <a href={navHref("/produits-en-reception")}>{"Produits en r\u00E9ception"}</a>
+          <a href={navHref("/reassorts-magasin")}>{"R\u00E9assorts magasin"}</a>
+          <a href={navHref("/aide-autorisations")}>Aide</a>
+        </NavMenu>
+
+        <AppLoader visible={showLoader} />
+
         <Frame>
           <Box minHeight="100vh" paddingBlockEnd="800">
             <Outlet />
@@ -28,24 +68,43 @@ export default function App() {
                 <img src="/logo-woora.png" alt="Woora" style={{ width: "180px", height: "auto" }} />
               </InlineStack>
               <Box paddingBlockStart="300">
-                <InlineStack align="center">
+                <InlineStack align="center" gap="100">
                   <Text as="p" variant="bodySm" tone="subdued">
-                    Application développée par{" "}
-                    <Link url="mailto:contact@woora.fr" removeUnderline>
-                      Woora
-                    </Link>
+                    {"Application d\u00E9velopp\u00E9e par Woora \u00B7"}{" "}
+                    <a
+                      href={`mailto:${CONTACT_EMAIL}`}
+                      target="_top"
+                      rel="noopener noreferrer"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        openMailClient();
+                      }}
+                      style={{ color: "inherit", textDecoration: "underline" }}
+                    >
+                      {CONTACT_EMAIL}
+                    </a>
                   </Text>
+                  <Button
+                    size="micro"
+                    onClick={() => {
+                      if (typeof navigator !== "undefined" && navigator.clipboard) {
+                        void navigator.clipboard.writeText(CONTACT_EMAIL);
+                      }
+                    }}
+                  >
+                    Copier l&apos;email
+                  </Button>
                 </InlineStack>
               </Box>
             </Box>
           </Box>
         </Frame>
+        </div>
       </PolarisAppProvider>
     </EmbeddedAppProvider>
   );
 }
 
-// Shopify needs React Router to catch some thrown responses, so that their headers are included in the response.
 export function ErrorBoundary() {
   return boundary.error(useRouteError());
 }

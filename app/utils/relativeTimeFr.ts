@@ -1,4 +1,4 @@
-export function formatRelativeSyncFr(lastSyncAt: string | undefined): string {
+﻿export function formatRelativeSyncFr(lastSyncAt: string | undefined): string {
   if (!lastSyncAt) return "Aucune synchronisation récente.";
   const targetMs = Date.parse(lastSyncAt);
   if (!Number.isFinite(targetMs)) return "Aucune synchronisation récente.";
@@ -11,3 +11,5 @@ export function formatRelativeSyncFr(lastSyncAt: string | undefined): string {
   const days = Math.floor(hours / 24);
   return `Il y a ${days} jour(s).`;
 }
+
+

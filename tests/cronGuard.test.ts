@@ -13,7 +13,7 @@ async function loadCronGuard() {
 
 test("cron secret accepte le header X-CRON-SECRET", async () => {
   const { assertCronSecret } = await loadCronGuard();
-  const request = new Request("https://example.com/api/cron/sync", {
+  const request = new Request("https://example.com/api/cron/synchroniserhroniser", {
     headers: { "X-CRON-SECRET": "top-secret" },
   });
 
@@ -22,15 +22,15 @@ test("cron secret accepte le header X-CRON-SECRET", async () => {
 
 test("cron secret accepte la query cron_secret", async () => {
   const { assertCronSecret } = await loadCronGuard();
-  const request = new Request("https://example.com/api/cron/sync?cron_secret=top-secret");
+  const request = new Request("https://example.com/api/cron/synchroniserhroniser?cron_secret=top-secret");
 
   assert.doesNotThrow(() => assertCronSecret(request, "top-secret"));
 });
 
 test("cron secret refuse un secret absent ou invalide", async () => {
   const { assertCronSecret } = await loadCronGuard();
-  const missing = new Request("https://example.com/api/cron/sync");
-  const wrong = new Request("https://example.com/api/cron/sync", {
+  const missing = new Request("https://example.com/api/cron/synchroniserhroniser");
+  const wrong = new Request("https://example.com/api/cron/synchroniserhroniser", {
     headers: { "X-CRON-SECRET": "wrong" },
   });
 

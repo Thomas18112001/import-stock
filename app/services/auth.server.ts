@@ -1,4 +1,4 @@
-import { authenticate } from "../shopify.server";
+﻿import { authenticate } from "../shopify.server";
 import { parseScopes, REQUIRED_SHOPIFY_SCOPES } from "../config/shopifyScopes";
 import { isValidShopDomain } from "../utils/validators";
 
@@ -70,3 +70,5 @@ export async function requireAdmin(request: Request): Promise<{
     actor,
   };
 }
+
+

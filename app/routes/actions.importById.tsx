@@ -1,4 +1,4 @@
-import type { ActionFunctionArgs } from "react-router";
+﻿import type { ActionFunctionArgs } from "react-router";
 import { assertActionRateLimit, getClientIp } from "../services/action-guard.server";
 import { requireAdmin } from "../services/auth.server";
 import { importById } from "../services/receiptService";
@@ -36,3 +36,4 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 };
+

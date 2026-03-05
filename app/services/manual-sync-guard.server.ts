@@ -1,4 +1,4 @@
-const WINDOW_MS = 10_000;
+﻿const WINDOW_MS = 10_000;
 const lastSyncByShop = new Map<string, number>();
 
 export function assertManualSyncRateLimit(shop: string): void {
@@ -9,3 +9,5 @@ export function assertManualSyncRateLimit(shop: string): void {
   }
   lastSyncByShop.set(shop, now);
 }
+
+

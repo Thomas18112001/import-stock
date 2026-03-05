@@ -1,4 +1,4 @@
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+﻿import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { redirect, useLoaderData } from "react-router";
 
 import { login } from "../../shopify.server";
@@ -55,6 +55,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const isEmbedded =
     url.searchParams.get("embedded") === "1" || Boolean(url.searchParams.get("host"));
+  const postAuthParams = new URLSearchParams();
+  postAuthParams.set("shop", shop);
+  const host = url.searchParams.get("host");
+  if (host) postAuthParams.set("host", host);
+  if (isEmbedded) postAuthParams.set("embedded", "1");
+  const postAuthPath = `/reassorts-magasin?${postAuthParams.toString()}`;
 
   try {
     const errors = loginErrorMessage(await login(request));
@@ -64,7 +70,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       } satisfies AuthLoginData;
     }
 
-    throw redirect("/app", {
+    throw redirect(postAuthPath, {
       headers: {
         "Set-Cookie": clearReauthGuardCookie(),
       },
@@ -105,3 +111,5 @@ export default function AuthLogin() {
     </main>
   );
 }
+
+

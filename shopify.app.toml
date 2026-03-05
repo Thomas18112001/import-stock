@@ -28,3 +28,4 @@ redirect_urls = [
   "https://import-stock.woora.fr/auth/shopify/callback",
   "https://import-stock.woora.fr/api/auth/callback",
 ]
+

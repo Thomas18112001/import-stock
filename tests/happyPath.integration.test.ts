@@ -127,3 +127,26 @@ test("resolveSkus mappe un SKU même si la casse diffère entre Prestashop et Sh
   const resolved = await resolveSkus(admin, ["abbisred"]);
   assert.equal(resolved.get("abbisred")?.inventoryItemId, "gid://shopify/InventoryItem/1");
 });
+
+test("inventoryAdjustQuantities supporte le stock entrant (incoming)", async () => {
+  let lastVariables: Record<string, unknown> | undefined;
+  const admin = {
+    graphql: async (_query: string, options?: { variables?: Record<string, unknown> }) => {
+      lastVariables = options?.variables;
+      return new Response(
+        JSON.stringify({ data: { inventoryAdjustQuantities: { userErrors: [] } } }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    },
+  };
+
+  await inventoryAdjustQuantities(
+    admin,
+    "gid://shopify/Location/1",
+    [{ inventoryItemId: "gid://shopify/InventoryItem/1", delta: 4 }],
+    "incoming",
+  );
+
+  const input = (lastVariables?.input ?? {}) as { name?: string };
+  assert.equal(input.name, "incoming");
+});

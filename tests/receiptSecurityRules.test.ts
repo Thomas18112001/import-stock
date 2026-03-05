@@ -1,4 +1,4 @@
-import test from "node:test";
+﻿import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -99,7 +99,7 @@ test("Endpoints sensibles refusent sans session Shopify", async () => {
   await assert.rejects(
     () =>
       syncRoute.action({
-        request: new Request("https://app.test/actions/sync", { method: "POST" }),
+        request: new Request("https://app.test/actions/synchroniser", { method: "POST" }),
       } as never),
     (error: unknown) => error instanceof Response,
   );
@@ -107,9 +107,10 @@ test("Endpoints sensibles refusent sans session Shopify", async () => {
   await assert.rejects(
     () =>
       applyRoute.action({
-        request: new Request("https://app.test/actions/receipts/test/apply", { method: "POST" }),
+        request: new Request("https://app.test/actions/produits-en-reception/test/apply", { method: "POST" }),
         params: { receiptGid: encodeURIComponent("gid://shopify/Metaobject/1") },
       } as never),
     (error: unknown) => error instanceof Response,
   );
 });
+

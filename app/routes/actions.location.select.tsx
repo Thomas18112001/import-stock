@@ -1,4 +1,4 @@
-import type { ActionFunctionArgs } from "react-router";
+﻿import type { ActionFunctionArgs } from "react-router";
 import { requireAdmin } from "../services/auth.server";
 import { listLocations } from "../services/shopifyGraphql";
 import { setSyncState } from "../services/shopifyMetaobjects";
@@ -20,3 +20,5 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   await setSyncState(admin, { selectedLocationId: locationId });
   return Response.json({ ok: true, selectedLocationId: locationId });
 };
+
+

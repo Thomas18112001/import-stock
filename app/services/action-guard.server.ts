@@ -1,4 +1,4 @@
-type ActionKey = "sync" | "import" | "prepare" | "apply" | "rollback";
+﻿type ActionKey = "sync" | "import" | "prepare" | "apply" | "receive" | "rollback";
 
 const lastHitByKey = new Map<string, number>();
 
@@ -30,3 +30,5 @@ export function assertActionRateLimit(
   }
   lastHitByKey.set(key, now);
 }
+
+

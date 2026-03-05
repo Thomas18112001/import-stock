@@ -1,4 +1,4 @@
-import test from "node:test";
+﻿import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -28,6 +28,7 @@ test("anti doublon import + anti double apply", () => {
   assert.equal(isStrictDuplicateForOrder(duplicate, 1001), true);
 
   assert.equal(canApplyFromStatus("READY"), true);
+  assert.equal(canApplyFromStatus("INCOMING"), false);
   assert.equal(canApplyFromStatus("APPLIED"), false);
 });
 
@@ -39,24 +40,27 @@ test("persistance boutique entre pages: selectedLocationId prioritaire", () => {
   assert.match(receiptsSource, /syncState\.selectedLocationId/);
 });
 
-test("Ajuster les SKU impossible si APPLIQUÉE: UI + backend guard", () => {
+test("Ajuster les SKU impossible si EN ARRIVAGE/APPLIQUÉE: UI + backend guard", () => {
+  assert.equal(canAdjustSkuFromStatus("INCOMING"), false);
   assert.equal(canAdjustSkuFromStatus("APPLIED"), false);
 
   const detailSource = readFile("app/routes/app.receipts.$receiptIdEnc.tsx");
   const serviceSource = readFile("app/services/receiptService.ts");
+  assert.match(detailSource, /showDiagnosticCard/);
   assert.match(detailSource, /disabled=\{!canAdjustSku\}/);
   assert.match(serviceSource, /if \(!canAdjustSkuFromStatus\(receipt\.status\)\)/);
 });
 
-test("suppression import impossible si APPLIQUÉE avec message FR", () => {
+test("suppression import impossible si EN ARRIVAGE/APPLIQUÉE avec message FR", () => {
+  assert.equal(canDeleteReceiptStatus("INCOMING"), false);
   assert.equal(canDeleteReceiptStatus("APPLIED"), false);
   const source = readFile("app/services/receiptService.ts");
-  assert.match(source, /Impossible de supprimer une réception avec stock ajouté/);
+  assert.match(source, /Impossible de supprimer une réception avec un flux de stock en cours ou appliqué/);
 });
 
 test("navigation 'Ouvrir' vers le détail réception", () => {
   const dashboardSource = readFile("app/routes/app._index.tsx");
   const receiptsSource = readFile("app/routes/app.receipts._index.tsx");
-  assert.match(dashboardSource, /\/app\/receipts\/\$\{receiptIdEnc\}/);
-  assert.match(receiptsSource, /\/app\/receipts\/\$\{receiptIdEnc\}/);
+  assert.match(dashboardSource, /\/produits-en-reception\/\$\{receiptIdEnc\}/);
+  assert.match(receiptsSource, /\/produits-en-reception\/\$\{receiptIdEnc\}/);
 });

@@ -1,4 +1,4 @@
-import { REQUIRED_SHOPIFY_SCOPES } from "../config/shopifyScopes";
+﻿import { REQUIRED_SHOPIFY_SCOPES } from "../config/shopifyScopes";
 
 export class MissingShopifyScopeError extends Error {
   missingScope: string;
@@ -38,3 +38,5 @@ export function toMissingScopeError(error: unknown, operation?: string): Missing
 export function listExpectedScopesForLogs(): string {
   return REQUIRED_SHOPIFY_SCOPES.join(",");
 }
+
+

@@ -23,6 +23,7 @@ test("aggregateDeltas additionne les deltas par SKU+inventoryItem", () => {
 
 test("isDuplicateApplyStatus bloque un second apply", () => {
   assert.equal(isDuplicateApplyStatus("READY"), false);
+  assert.equal(isDuplicateApplyStatus("INCOMING"), true);
   assert.equal(isDuplicateApplyStatus("APPLIED"), true);
   assert.equal(isDuplicateApplyStatus("BLOCKED"), true);
 });
@@ -40,5 +41,6 @@ test("aggregateDeltas conserve les deltas negatifs (rollback vers stock negatif 
 test("canDeleteReceiptStatus interdit suppression apres application", () => {
   assert.equal(canDeleteReceiptStatus("IMPORTED"), true);
   assert.equal(canDeleteReceiptStatus("READY"), true);
+  assert.equal(canDeleteReceiptStatus("INCOMING"), false);
   assert.equal(canDeleteReceiptStatus("APPLIED"), false);
 });

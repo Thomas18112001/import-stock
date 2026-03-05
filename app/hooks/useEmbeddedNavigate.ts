@@ -1,11 +1,13 @@
 import { useCallback } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
+import { withEmbeddedContext } from "../utils/embeddedPath";
 
 type NavigationResult = { ok: boolean; error?: string };
 
 export function useEmbeddedNavigate() {
   const routerNavigate = useNavigate();
+  const location = useLocation();
   const shopify = useAppBridge();
 
   return useCallback(
@@ -13,14 +15,15 @@ export function useEmbeddedNavigate() {
       if (!path.startsWith("/")) {
         return { ok: false, error: "Chemin de navigation invalide" };
       }
+      const contextualPath = withEmbeddedContext(path, location.search, location.pathname);
       try {
         const appBridgeNavigate = (shopify as { navigation?: { navigate?: (to: string) => void } })?.navigation
           ?.navigate;
         if (typeof appBridgeNavigate === "function") {
-          appBridgeNavigate(path);
+          appBridgeNavigate(contextualPath);
           return { ok: true };
         }
-        routerNavigate(path);
+        routerNavigate(contextualPath);
         return { ok: true };
       } catch (error) {
         const message = error instanceof Error ? error.message : "Navigation impossible";
@@ -32,6 +35,6 @@ export function useEmbeddedNavigate() {
         return { ok: false, error: message };
       }
     },
-    [routerNavigate, shopify],
+    [location.pathname, location.search, routerNavigate, shopify],
   );
 }

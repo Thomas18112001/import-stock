@@ -4,7 +4,7 @@ import { redirect } from "react-router";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const search = url.search || "";
-  throw redirect(`/app${search}`);
+  throw redirect(`reassorts-magasin${search}`);
 };
 
 export default function IndexRoute() {

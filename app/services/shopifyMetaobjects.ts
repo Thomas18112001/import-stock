@@ -25,6 +25,9 @@ export type MetaTypes = {
   receiptLine: string;
   adjustment: string;
   adjustmentLine: string;
+  purchaseOrder: string;
+  purchaseOrderLine: string;
+  purchaseOrderAudit: string;
 };
 
 export type MetaobjectConnection = {
@@ -41,11 +44,19 @@ export type SyncState = {
   selectedLocationId: string;
   cursorByLocation: Record<string, number>;
   lastSyncAtByLocation: Record<string, string>;
+  prestaCheckpointByLocation: Record<string, { dateUpd: string; orderId: number }>;
 };
 
 type DefinitionTemplate = {
   key: keyof MetaTypes;
-  suffix: "wm_receipt" | "wm_receipt_line" | "wm_adjustment" | "wm_adjustment_line";
+  suffix:
+    | "wm_receipt"
+    | "wm_receipt_line"
+    | "wm_adjustment"
+    | "wm_adjustment_line"
+    | "wm_purchase_order"
+    | "wm_purchase_order_line"
+    | "wm_purchase_order_audit";
   name: string;
   fields: DefField[];
 };
@@ -101,6 +112,71 @@ const definitionTemplates: DefinitionTemplate[] = [
       { key: "sku", name: "SKU", type: "single_line_text_field", required: true },
       { key: "qty_delta", name: "Qty Delta", type: "number_integer", required: true },
       { key: "inventory_item_gid", name: "Inventory Item GID", type: "single_line_text_field", required: true },
+    ],
+  },
+  {
+    key: "purchaseOrder",
+    suffix: "wm_purchase_order",
+    name: "WearMoi Purchase Order",
+    fields: [
+      { key: "number", name: "Number", type: "single_line_text_field", required: true },
+      { key: "issued_at", name: "Issued At", type: "date_time", required: true },
+      { key: "expected_arrival_at", name: "Expected Arrival At", type: "date_time" },
+      { key: "supplier_name", name: "Supplier Name", type: "single_line_text_field", required: true },
+      { key: "supplier_address", name: "Supplier Address", type: "multi_line_text_field" },
+      { key: "ship_to_name", name: "Ship To Name", type: "single_line_text_field" },
+      { key: "ship_to_address", name: "Ship To Address", type: "multi_line_text_field" },
+      { key: "bill_to_name", name: "Bill To Name", type: "single_line_text_field" },
+      { key: "bill_to_address", name: "Bill To Address", type: "multi_line_text_field" },
+      { key: "currency", name: "Currency", type: "single_line_text_field", required: true },
+      { key: "payment_terms", name: "Payment Terms", type: "single_line_text_field" },
+      { key: "reference_number", name: "Reference Number", type: "single_line_text_field" },
+      { key: "supplier_notes", name: "Supplier Notes", type: "multi_line_text_field" },
+      { key: "internal_notes", name: "Internal Notes", type: "multi_line_text_field" },
+      { key: "status", name: "Status", type: "single_line_text_field", required: true },
+      { key: "destination_location_id", name: "Destination Location ID", type: "single_line_text_field", required: true },
+      { key: "created_by", name: "Created By", type: "single_line_text_field" },
+      { key: "shopify_transfer_id", name: "Shopify Transfer ID", type: "single_line_text_field" },
+      { key: "shopify_transfer_admin_url", name: "Shopify Transfer Admin URL", type: "single_line_text_field" },
+      { key: "totals_snapshot", name: "Totals Snapshot", type: "multi_line_text_field" },
+      { key: "line_count", name: "Line Count", type: "number_integer" },
+      { key: "subtotal_ht", name: "Subtotal HT", type: "number_decimal" },
+      { key: "tax_total", name: "Tax Total", type: "number_decimal" },
+      { key: "total_ttc", name: "Total TTC", type: "number_decimal" },
+    ],
+  },
+  {
+    key: "purchaseOrderLine",
+    suffix: "wm_purchase_order_line",
+    name: "WearMoi Purchase Order Line",
+    fields: [
+      { key: "purchase_order_gid", name: "Purchase Order GID", type: "single_line_text_field", required: true },
+      { key: "shopify_variant_id", name: "Shopify Variant ID", type: "single_line_text_field", required: true },
+      { key: "inventory_item_gid", name: "Inventory Item GID", type: "single_line_text_field", required: true },
+      { key: "product_title", name: "Product Title", type: "single_line_text_field" },
+      { key: "variant_title", name: "Variant Title", type: "single_line_text_field" },
+      { key: "sku", name: "SKU", type: "single_line_text_field" },
+      { key: "supplier_sku", name: "Supplier SKU", type: "single_line_text_field" },
+      { key: "image_url", name: "Image URL", type: "single_line_text_field" },
+      { key: "quantity_ordered", name: "Quantity Ordered", type: "number_integer", required: true },
+      { key: "quantity_received", name: "Quantity Received", type: "number_integer", required: true },
+      { key: "unit_cost", name: "Unit Cost HT", type: "number_decimal", required: true },
+      { key: "tax_rate", name: "Tax Rate", type: "number_decimal", required: true },
+      { key: "line_total_ht", name: "Line Total HT", type: "number_decimal", required: true },
+      { key: "line_tax_amount", name: "Line Tax Amount", type: "number_decimal", required: true },
+      { key: "line_total_ttc", name: "Line Total TTC", type: "number_decimal", required: true },
+    ],
+  },
+  {
+    key: "purchaseOrderAudit",
+    suffix: "wm_purchase_order_audit",
+    name: "WearMoi Purchase Order Audit",
+    fields: [
+      { key: "purchase_order_gid", name: "Purchase Order GID", type: "single_line_text_field", required: true },
+      { key: "action", name: "Action", type: "single_line_text_field", required: true },
+      { key: "actor", name: "Actor", type: "single_line_text_field", required: true },
+      { key: "payload", name: "Payload", type: "multi_line_text_field" },
+      { key: "created_at", name: "Created At", type: "date_time", required: true },
     ],
   },
 ];
@@ -161,6 +237,9 @@ function buildAppReservedTypes(appId: string): MetaTypes {
     receiptLine: `app--${appId}--wm_receipt_line`,
     adjustment: `app--${appId}--wm_adjustment`,
     adjustmentLine: `app--${appId}--wm_adjustment_line`,
+    purchaseOrder: `app--${appId}--wm_purchase_order`,
+    purchaseOrderLine: `app--${appId}--wm_purchase_order_line`,
+    purchaseOrderAudit: `app--${appId}--wm_purchase_order_audit`,
   };
 }
 
@@ -173,7 +252,7 @@ export async function getMetaTypes(admin: AdminClient): Promise<MetaTypes> {
   if (!loggedTypes) {
     loggedTypes = true;
     console.info(
-      `[metaobjects] using app-reserved types: ${cachedMetaTypes.receipt}, ${cachedMetaTypes.receiptLine}, ${cachedMetaTypes.adjustment}, ${cachedMetaTypes.adjustmentLine}`,
+      `[metaobjects] using app-reserved types: ${cachedMetaTypes.receipt}, ${cachedMetaTypes.receiptLine}, ${cachedMetaTypes.adjustment}, ${cachedMetaTypes.adjustmentLine}, ${cachedMetaTypes.purchaseOrder}, ${cachedMetaTypes.purchaseOrderLine}, ${cachedMetaTypes.purchaseOrderAudit}`,
     );
   }
   return cachedMetaTypes;
@@ -328,8 +407,34 @@ export async function getMetaobjectById(
 }
 
 export async function listMetaobjects(admin: AdminClient, type: string): Promise<MetaobjectNode[]> {
-  const connection = await listMetaobjectsConnection(admin, type, 250, null);
-  return connection.nodes;
+  const nodes: MetaobjectNode[] = [];
+  let after: string | null = null;
+  const seenCursors = new Set<string>();
+  let pages = 0;
+  const maxPages = 200;
+  while (pages < maxPages) {
+    const connection = await listMetaobjectsConnection(admin, type, 250, after);
+    nodes.push(...connection.nodes);
+    pages += 1;
+    if (!connection.pageInfo.hasNextPage || !connection.pageInfo.endCursor) {
+      break;
+    }
+    if (seenCursors.has(connection.pageInfo.endCursor)) {
+      debugLog("metaobjects pagination cursor loop", {
+        type,
+        pages,
+        nodes: nodes.length,
+        cursor: connection.pageInfo.endCursor,
+      });
+      break;
+    }
+    seenCursors.add(connection.pageInfo.endCursor);
+    after = connection.pageInfo.endCursor;
+  }
+  if (pages >= maxPages) {
+    debugLog("metaobjects pagination capped", { type, pages, maxPages, nodes: nodes.length });
+  }
+  return nodes;
 }
 
 export async function listMetaobjectsConnection(
@@ -337,6 +442,7 @@ export async function listMetaobjectsConnection(
   type: string,
   first: number,
   after: string | null,
+  query?: string | null,
 ): Promise<MetaobjectConnection> {
   const data = await graphqlRequest<{
     metaobjects: {
@@ -357,8 +463,8 @@ export async function listMetaobjectsConnection(
   }>(
     admin,
     `#graphql
-      query MetaobjectsByType($type: String!, $first: Int!, $after: String) {
-        metaobjects(type: $type, first: $first, after: $after) {
+      query MetaobjectsByType($type: String!, $first: Int!, $after: String, $query: String) {
+        metaobjects(type: $type, first: $first, after: $after, query: $query) {
           nodes {
             id
             handle
@@ -375,7 +481,7 @@ export async function listMetaobjectsConnection(
         }
       }
     `,
-    { type, first, after },
+    { type, first, after, query: query ?? null },
   );
   return {
     nodes: data.metaobjects.nodes.map(mapNode),
@@ -393,6 +499,7 @@ export async function getDashboardBundle(
     shop: {
       cursorByLocation: { value: string | null } | null;
       lastSyncByLocation: { value: string | null } | null;
+      checkpointByLocation: { value: string | null } | null;
       selectedLocation: { value: string | null } | null;
     };
     locations: {
@@ -422,6 +529,9 @@ export async function getDashboardBundle(
             value
           }
           lastSyncByLocation: metafield(namespace: "wearmoi_stock_sync", key: "last_sync_at_by_location") {
+            value
+          }
+          checkpointByLocation: metafield(namespace: "wearmoi_stock_sync", key: "last_presta_checkpoint_by_location") {
             value
           }
           selectedLocation: metafield(namespace: "wearmoi_stock_sync", key: "selected_location_id") {
@@ -456,17 +566,20 @@ export async function getDashboardBundle(
   );
   const cursorByLocation = parseNumberMap(data.shop.cursorByLocation?.value);
   const lastSyncAtByLocation = parseStringMap(data.shop.lastSyncByLocation?.value);
+  const prestaCheckpointByLocation = parseCheckpointMap(data.shop.checkpointByLocation?.value);
   const selectedLocationId = data.shop.selectedLocation?.value ?? "";
   debugLog("dashboard sync state read", {
     selectedLocationId,
     cursorKeys: Object.keys(cursorByLocation).length,
     lastSyncKeys: Object.keys(lastSyncAtByLocation).length,
+    checkpointKeys: Object.keys(prestaCheckpointByLocation).length,
   });
   return {
     syncState: {
       selectedLocationId,
       cursorByLocation,
       lastSyncAtByLocation,
+      prestaCheckpointByLocation,
     },
     locations: data.locations.nodes,
     receipts: data.metaobjects.nodes.map(mapNode),
@@ -500,6 +613,27 @@ function parseStringMap(rawValue: string | null | undefined): Record<string, str
       if (typeof value === "string" && value.trim()) {
         out[key] = value;
       }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function parseCheckpointMap(
+  rawValue: string | null | undefined,
+): Record<string, { dateUpd: string; orderId: number }> {
+  if (!rawValue) return {};
+  try {
+    const parsed = JSON.parse(rawValue) as Record<string, unknown>;
+    const out: Record<string, { dateUpd: string; orderId: number }> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (!value || typeof value !== "object") continue;
+      const dateUpd = String((value as { dateUpd?: unknown }).dateUpd ?? "").trim();
+      const orderId = Number((value as { orderId?: unknown }).orderId ?? NaN);
+      if (!dateUpd) continue;
+      if (!Number.isInteger(orderId) || orderId < 0) continue;
+      out[key] = { dateUpd, orderId };
     }
     return out;
   } catch {
@@ -603,7 +737,11 @@ export async function upsertMetaobjectByHandle(
   return existing.id;
 }
 
-export async function getLastPrestaOrderId(admin: AdminClient): Promise<number> {
+export async function getShopMetafieldValue(
+  admin: AdminClient,
+  namespace: string,
+  key: string,
+): Promise<string | null> {
   const data = await graphqlRequest<{
     shop: {
       metafield: { value: string | null } | null;
@@ -611,16 +749,64 @@ export async function getLastPrestaOrderId(admin: AdminClient): Promise<number> 
   }>(
     admin,
     `#graphql
-      query GetCursor {
+      query GetShopMetafield($namespace: String!, $key: String!) {
         shop {
-          metafield(namespace: "wearmoi_stock_sync", key: "last_presta_order_id") {
+          metafield(namespace: $namespace, key: $key) {
             value
           }
         }
       }
     `,
+    { namespace, key },
   );
-  const raw = data.shop.metafield?.value ?? "0";
+  return data.shop.metafield?.value ?? null;
+}
+
+export async function setShopMetafields(
+  admin: AdminClient,
+  input: Array<{
+    namespace: string;
+    key: string;
+    type: string;
+    value: string;
+  }>,
+): Promise<void> {
+  if (!input.length) return;
+  const shopData = await graphqlRequest<{ shop: { id: string } }>(
+    admin,
+    `#graphql
+      query ShopIdForSetMetafields {
+        shop { id }
+      }
+    `,
+  );
+  const metafields = input.map((field) => ({
+    ownerId: shopData.shop.id,
+    namespace: field.namespace,
+    key: field.key,
+    type: field.type,
+    value: field.value,
+  }));
+  const result = await graphqlRequest<{
+    metafieldsSet: { userErrors: Array<{ message: string }> };
+  }>(
+    admin,
+    `#graphql
+      mutation SetShopMetafields($metafields: [MetafieldsSetInput!]!) {
+        metafieldsSet(metafields: $metafields) {
+          userErrors { message }
+        }
+      }
+    `,
+    { metafields },
+  );
+  if (result.metafieldsSet.userErrors.length) {
+    throw new Error(result.metafieldsSet.userErrors.map((error) => error.message).join("; "));
+  }
+}
+
+export async function getLastPrestaOrderId(admin: AdminClient): Promise<number> {
+  const raw = (await getShopMetafieldValue(admin, "wearmoi_stock_sync", "last_presta_order_id")) ?? "0";
   const value = Number(raw);
   const parsed = Number.isFinite(value) ? value : 0;
   debugLog("cursor read", { raw, parsed });
@@ -628,45 +814,14 @@ export async function getLastPrestaOrderId(admin: AdminClient): Promise<number> 
 }
 
 export async function setLastPrestaOrderId(admin: AdminClient, value: number): Promise<void> {
-  const data = await graphqlRequest<{
-    shop: { id: string };
-  }>(
-    admin,
-    `#graphql
-      query ShopId {
-        shop { id }
-      }
-    `,
-  );
-
-  const result = await graphqlRequest<{
-    metafieldsSet: { userErrors: Array<{ message: string }> };
-  }>(
-    admin,
-    `#graphql
-      mutation SetCursor($metafields: [MetafieldsSetInput!]!) {
-        metafieldsSet(metafields: $metafields) {
-          userErrors { message }
-        }
-      }
-    `,
+  await setShopMetafields(admin, [
     {
-      metafields: [
-        {
-          ownerId: data.shop.id,
-          namespace: "wearmoi_stock_sync",
-          key: "last_presta_order_id",
-          type: "single_line_text_field",
-          value: String(value),
-        },
-      ],
+      namespace: "wearmoi_stock_sync",
+      key: "last_presta_order_id",
+      type: "single_line_text_field",
+      value: String(value),
     },
-  );
-  if (result.metafieldsSet.userErrors.length) {
-    throw new Error(
-      `Cursor write failed: ${result.metafieldsSet.userErrors.map((e) => e.message).join("; ")}`,
-    );
-  }
+  ]);
   debugLog("cursor write", { next: value });
 }
 
@@ -675,6 +830,7 @@ export async function getSyncState(admin: AdminClient): Promise<SyncState> {
     shop: {
       cursorByLocation: { value: string | null } | null;
       lastSyncByLocation: { value: string | null } | null;
+      checkpointByLocation: { value: string | null } | null;
       selectedLocation: { value: string | null } | null;
     };
   }>(
@@ -688,6 +844,9 @@ export async function getSyncState(admin: AdminClient): Promise<SyncState> {
           lastSyncByLocation: metafield(namespace: "wearmoi_stock_sync", key: "last_sync_at_by_location") {
             value
           }
+          checkpointByLocation: metafield(namespace: "wearmoi_stock_sync", key: "last_presta_checkpoint_by_location") {
+            value
+          }
           selectedLocation: metafield(namespace: "wearmoi_stock_sync", key: "selected_location_id") {
             value
           }
@@ -699,6 +858,7 @@ export async function getSyncState(admin: AdminClient): Promise<SyncState> {
     selectedLocationId: data.shop.selectedLocation?.value ?? "",
     cursorByLocation: parseNumberMap(data.shop.cursorByLocation?.value),
     lastSyncAtByLocation: parseStringMap(data.shop.lastSyncByLocation?.value),
+    prestaCheckpointByLocation: parseCheckpointMap(data.shop.checkpointByLocation?.value),
   };
 }
 
@@ -708,6 +868,7 @@ export async function setSyncState(
     selectedLocationId?: string;
     cursorByLocation?: Record<string, number>;
     lastSyncAtByLocation?: Record<string, string>;
+    prestaCheckpointByLocation?: Record<string, { dateUpd: string; orderId: number }>;
   },
 ): Promise<void> {
   const shopData = await graphqlRequest<{ shop: { id: string } }>(
@@ -750,6 +911,15 @@ export async function setSyncState(
       key: "last_sync_at_by_location",
       type: "multi_line_text_field",
       value: JSON.stringify(input.lastSyncAtByLocation),
+    });
+  }
+  if (input.prestaCheckpointByLocation) {
+    metafields.push({
+      ownerId: shopData.shop.id,
+      namespace: "wearmoi_stock_sync",
+      key: "last_presta_checkpoint_by_location",
+      type: "multi_line_text_field",
+      value: JSON.stringify(input.prestaCheckpointByLocation),
     });
   }
   if (!metafields.length) return;

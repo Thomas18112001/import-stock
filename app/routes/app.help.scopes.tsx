@@ -1,4 +1,4 @@
-import { BlockStack, Button, Card, List, Page, Text } from "@shopify/polaris";
+﻿import { BlockStack, Button, Card, List, Page, Text } from "@shopify/polaris";
 import { useEmbeddedNavigate } from "../hooks/useEmbeddedNavigate";
 
 export default function ScopeHelpPage() {
@@ -7,7 +7,7 @@ export default function ScopeHelpPage() {
   return (
     <Page
       title="Procédure autorisations Shopify"
-      backAction={{ content: "Tableau de bord", onAction: () => embeddedNavigate("/app") }}
+      backAction={{ content: "Tableau de bord", onAction: () => embeddedNavigate("/") }}
     >
       <Card>
         <BlockStack gap="300">
@@ -24,9 +24,12 @@ export default function ScopeHelpPage() {
           <Text as="p" variant="bodyMd">
             Verification: `shopify app env show` doit afficher `SCOPES` avec les droits metaobjects attendus.
           </Text>
-          <Button onClick={() => embeddedNavigate("/app")}>Retour au dashboard</Button>
+          <Button onClick={() => embeddedNavigate("/")}>Retour au dashboard</Button>
         </BlockStack>
       </Card>
     </Page>
   );
 }
+
+
+

@@ -41,5 +41,5 @@ export function isDuplicateApplyStatus(status: string): boolean {
 }
 
 export function canDeleteReceiptStatus(status: string): boolean {
-  return status !== "APPLIED";
+  return status !== "APPLIED" && status !== "INCOMING";
 }

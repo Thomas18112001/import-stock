@@ -1,5 +1,5 @@
 const SHOPIFY_GID_PATTERN = /^gid:\/\/shopify\/[A-Za-z_]+\/\d+$/;
-const SKU_ALLOWED_PATTERN = /^[A-Za-z0-9._-]{1,80}$/;
+const SKU_ALLOWED_PATTERN = /^[^\r\n\t]{1,120}$/;
 const SHOP_DOMAIN_PATTERN = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/;
 
 export function parsePositiveIntInput(value: FormDataEntryValue | null): number | null {
@@ -32,11 +32,11 @@ export function sanitizeSort(raw: string, allowed: string[], fallback: string): 
 }
 
 export function normalizeSku(raw: FormDataEntryValue | null): string {
-  return String(raw ?? "").trim().slice(0, 80);
+  return String(raw ?? "").trim().replace(/\s+/g, " ").slice(0, 120);
 }
 
 export function normalizeSkuText(raw: string): string {
-  return raw.trim().slice(0, 80);
+  return raw.trim().replace(/\s+/g, " ").slice(0, 120);
 }
 
 export function isValidSku(sku: string): boolean {
