@@ -4,11 +4,7 @@ const lastHitByKey = new Map<string, number>();
 const WINDOW_MS = 60_000;
 
 function readCronToken(request: Request): string {
-  const headerToken = (request.headers.get("X-CRON-SECRET") ?? "").trim();
-  if (headerToken) return headerToken;
-
-  const url = new URL(request.url);
-  return (url.searchParams.get("cron_secret") ?? url.searchParams.get("cronSecret") ?? "").trim();
+  return (request.headers.get("X-CRON-SECRET") ?? "").trim();
 }
 
 export function assertCronSecret(request: Request, expectedSecret: string | null): void {

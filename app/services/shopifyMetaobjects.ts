@@ -28,6 +28,14 @@ export type MetaTypes = {
   purchaseOrder: string;
   purchaseOrderLine: string;
   purchaseOrderAudit: string;
+  auditLog: string;
+  thresholdGlobal: string;
+  thresholdOverride: string;
+  salesAgg: string;
+  alertConfig: string;
+  alertEvent: string;
+  supplier: string;
+  supplierSku: string;
 };
 
 export type MetaobjectConnection = {
@@ -56,7 +64,15 @@ type DefinitionTemplate = {
     | "wm_adjustment_line"
     | "wm_purchase_order"
     | "wm_purchase_order_line"
-    | "wm_purchase_order_audit";
+    | "wm_purchase_order_audit"
+    | "wm_audit_log"
+    | "wm_threshold_global"
+    | "wm_threshold_override"
+    | "wm_sales_agg"
+    | "wm_alert_config"
+    | "wm_alert_event"
+    | "wm_supplier"
+    | "wm_supplier_sku";
   name: string;
   fields: DefField[];
 };
@@ -179,6 +195,123 @@ const definitionTemplates: DefinitionTemplate[] = [
       { key: "created_at", name: "Created At", type: "date_time", required: true },
     ],
   },
+  {
+    key: "auditLog",
+    suffix: "wm_audit_log",
+    name: "WearMoi Audit Log",
+    fields: [
+      { key: "event_type", name: "Event Type", type: "single_line_text_field", required: true },
+      { key: "entity_type", name: "Entity Type", type: "single_line_text_field", required: true },
+      { key: "entity_id", name: "Entity ID", type: "single_line_text_field" },
+      { key: "location_id", name: "Location ID", type: "single_line_text_field" },
+      { key: "presta_order_id", name: "Presta Order ID", type: "number_integer" },
+      { key: "status", name: "Status", type: "single_line_text_field" },
+      { key: "message", name: "Message", type: "single_line_text_field" },
+      { key: "payload", name: "Payload", type: "multi_line_text_field" },
+      { key: "actor", name: "Actor", type: "single_line_text_field" },
+      { key: "created_at", name: "Created At", type: "date_time", required: true },
+    ],
+  },
+  {
+    key: "thresholdGlobal",
+    suffix: "wm_threshold_global",
+    name: "WearMoi Threshold Global",
+    fields: [
+      { key: "sku", name: "SKU", type: "single_line_text_field", required: true },
+      { key: "min_qty", name: "Min Qty", type: "number_integer" },
+      { key: "max_qty", name: "Max Qty", type: "number_integer" },
+      { key: "safety_stock", name: "Safety Stock", type: "number_integer" },
+      { key: "target_coverage_days", name: "Target Coverage Days", type: "number_integer" },
+      { key: "updated_by", name: "Updated By", type: "single_line_text_field" },
+      { key: "notes", name: "Notes", type: "multi_line_text_field" },
+    ],
+  },
+  {
+    key: "thresholdOverride",
+    suffix: "wm_threshold_override",
+    name: "WearMoi Threshold Override",
+    fields: [
+      { key: "sku", name: "SKU", type: "single_line_text_field", required: true },
+      { key: "location_id", name: "Location ID", type: "single_line_text_field", required: true },
+      { key: "min_qty", name: "Min Qty", type: "number_integer" },
+      { key: "max_qty", name: "Max Qty", type: "number_integer" },
+      { key: "safety_stock", name: "Safety Stock", type: "number_integer" },
+      { key: "target_coverage_days", name: "Target Coverage Days", type: "number_integer" },
+      { key: "updated_by", name: "Updated By", type: "single_line_text_field" },
+      { key: "notes", name: "Notes", type: "multi_line_text_field" },
+    ],
+  },
+  {
+    key: "salesAgg",
+    suffix: "wm_sales_agg",
+    name: "WearMoi Sales Aggregation",
+    fields: [
+      { key: "sku", name: "SKU", type: "single_line_text_field", required: true },
+      { key: "location_id", name: "Location ID", type: "single_line_text_field", required: true },
+      { key: "range_days", name: "Range Days", type: "number_integer", required: true },
+      { key: "total_sold", name: "Total Sold", type: "number_integer", required: true },
+      { key: "avg_daily_sales", name: "Avg Daily Sales", type: "number_decimal", required: true },
+      { key: "window_start_at", name: "Window Start At", type: "date_time", required: true },
+      { key: "window_end_at", name: "Window End At", type: "date_time", required: true },
+      { key: "sales_last_at", name: "Sales Last At", type: "date_time" },
+      { key: "source", name: "Source", type: "single_line_text_field" },
+      { key: "payload", name: "Payload", type: "multi_line_text_field" },
+    ],
+  },
+  {
+    key: "alertConfig",
+    suffix: "wm_alert_config",
+    name: "WearMoi Alert Config",
+    fields: [
+      { key: "frequency", name: "Frequency", type: "single_line_text_field" },
+      { key: "emails", name: "Emails", type: "multi_line_text_field" },
+      { key: "enabled_types", name: "Enabled Types", type: "multi_line_text_field" },
+      { key: "stockout_soon_days", name: "Stockout Soon Days", type: "number_integer" },
+      { key: "updated_by", name: "Updated By", type: "single_line_text_field" },
+      { key: "updated_at", name: "Updated At", type: "date_time" },
+    ],
+  },
+  {
+    key: "alertEvent",
+    suffix: "wm_alert_event",
+    name: "WearMoi Alert Event",
+    fields: [
+      { key: "dedup_key", name: "Dedup Key", type: "single_line_text_field", required: true },
+      { key: "type", name: "Type", type: "single_line_text_field", required: true },
+      { key: "status", name: "Status", type: "single_line_text_field", required: true },
+      { key: "severity", name: "Severity", type: "single_line_text_field", required: true },
+      { key: "location_id", name: "Location ID", type: "single_line_text_field" },
+      { key: "sku", name: "SKU", type: "single_line_text_field" },
+      { key: "message", name: "Message", type: "single_line_text_field" },
+      { key: "payload", name: "Payload", type: "multi_line_text_field" },
+      { key: "first_triggered_at", name: "First Triggered At", type: "date_time", required: true },
+      { key: "last_triggered_at", name: "Last Triggered At", type: "date_time", required: true },
+      { key: "resolved_at", name: "Resolved At", type: "date_time" },
+    ],
+  },
+  {
+    key: "supplier",
+    suffix: "wm_supplier",
+    name: "WearMoi Supplier",
+    fields: [
+      { key: "name", name: "Name", type: "single_line_text_field", required: true },
+      { key: "email", name: "Email", type: "single_line_text_field" },
+      { key: "lead_time_days", name: "Lead Time Days", type: "number_integer" },
+      { key: "notes", name: "Notes", type: "multi_line_text_field" },
+      { key: "active", name: "Active", type: "single_line_text_field" },
+    ],
+  },
+  {
+    key: "supplierSku",
+    suffix: "wm_supplier_sku",
+    name: "WearMoi Supplier SKU",
+    fields: [
+      { key: "supplier_handle", name: "Supplier Handle", type: "single_line_text_field", required: true },
+      { key: "sku", name: "SKU", type: "single_line_text_field", required: true },
+      { key: "lead_time_days_override", name: "Lead Time Days Override", type: "number_integer" },
+      { key: "notes", name: "Notes", type: "multi_line_text_field" },
+    ],
+  },
 ];
 
 let cachedMetaTypes: MetaTypes | null = null;
@@ -240,6 +373,14 @@ function buildAppReservedTypes(appId: string): MetaTypes {
     purchaseOrder: `app--${appId}--wm_purchase_order`,
     purchaseOrderLine: `app--${appId}--wm_purchase_order_line`,
     purchaseOrderAudit: `app--${appId}--wm_purchase_order_audit`,
+    auditLog: `app--${appId}--wm_audit_log`,
+    thresholdGlobal: `app--${appId}--wm_threshold_global`,
+    thresholdOverride: `app--${appId}--wm_threshold_override`,
+    salesAgg: `app--${appId}--wm_sales_agg`,
+    alertConfig: `app--${appId}--wm_alert_config`,
+    alertEvent: `app--${appId}--wm_alert_event`,
+    supplier: `app--${appId}--wm_supplier`,
+    supplierSku: `app--${appId}--wm_supplier_sku`,
   };
 }
 
@@ -252,7 +393,7 @@ export async function getMetaTypes(admin: AdminClient): Promise<MetaTypes> {
   if (!loggedTypes) {
     loggedTypes = true;
     console.info(
-      `[metaobjects] using app-reserved types: ${cachedMetaTypes.receipt}, ${cachedMetaTypes.receiptLine}, ${cachedMetaTypes.adjustment}, ${cachedMetaTypes.adjustmentLine}, ${cachedMetaTypes.purchaseOrder}, ${cachedMetaTypes.purchaseOrderLine}, ${cachedMetaTypes.purchaseOrderAudit}`,
+      `[metaobjects] using app-reserved types: ${cachedMetaTypes.receipt}, ${cachedMetaTypes.receiptLine}, ${cachedMetaTypes.adjustment}, ${cachedMetaTypes.adjustmentLine}, ${cachedMetaTypes.purchaseOrder}, ${cachedMetaTypes.purchaseOrderLine}, ${cachedMetaTypes.purchaseOrderAudit}, ${cachedMetaTypes.auditLog}, ${cachedMetaTypes.thresholdGlobal}, ${cachedMetaTypes.thresholdOverride}, ${cachedMetaTypes.salesAgg}, ${cachedMetaTypes.alertConfig}, ${cachedMetaTypes.alertEvent}, ${cachedMetaTypes.supplier}, ${cachedMetaTypes.supplierSku}`,
     );
   }
   return cachedMetaTypes;

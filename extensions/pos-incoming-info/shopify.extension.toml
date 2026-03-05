@@ -1,0 +1,24 @@
+name = "pos-incoming-info"
+uid = "ea068665-8240-c299-7d21-59a529d750a84defb604"
+type = "pos_ui_extension"
+
+[[targeting]]
+target = "pos.product-details.block.render"
+module = "./src/index.jsx"
+
+[capabilities]
+network_access = true
+
+[settings]
+
+[[settings.fields]]
+key = "api_base_url"
+type = "single_line_text_field"
+name = "API base URL"
+description = "URL publique de l'application (ex: https://app.example.com)"
+
+[[settings.fields]]
+key = "shop_domain"
+type = "single_line_text_field"
+name = "Shop domain"
+description = "myshopify domain (ex: your-shop.myshopify.com)"

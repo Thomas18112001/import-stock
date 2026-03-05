@@ -17,6 +17,8 @@ database.sqlite
 .env.*
 !.env.example
 
+tmp_*.html
+
 
 
 

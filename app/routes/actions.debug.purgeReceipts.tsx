@@ -7,11 +7,9 @@ function isDebugAuthorized(request: Request, form: FormData): boolean {
   if (process.env.NODE_ENV === "development") return true;
   const expectedToken = String(process.env.DEBUG_SYNC_TOKEN ?? "").trim();
   if (!expectedToken) return false;
-  const url = new URL(request.url);
   const providedToken = String(
     request.headers.get("x-debug-token") ??
       form.get("debugToken") ??
-      url.searchParams.get("debugToken") ??
       "",
   ).trim();
   return Boolean(providedToken) && providedToken === expectedToken;
@@ -37,5 +35,4 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return Response.json({ ok: false, error: message }, { status: 400 });
   }
 };
-
 

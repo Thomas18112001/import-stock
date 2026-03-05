@@ -1,4 +1,5 @@
 ﻿import type { AdminClient } from "./auth.server";
+import { safeLogAuditEvent } from "./auditLogService";
 import {
   getInventoryItemSnapshots,
   graphqlRequest,
@@ -140,6 +141,24 @@ export type PurchaseOrderDetail = {
   audit: PurchaseOrderAuditItem[];
 };
 
+export type IncomingSourceSummary = {
+  purchaseOrderGid: string;
+  number: string;
+  expectedArrivalAt: string;
+  quantity: number;
+};
+
+export type IncomingLocationItem = {
+  sku: string;
+  inventoryItemId: string;
+  productTitle: string;
+  variantTitle: string;
+  imageUrl: string;
+  incomingQty: number;
+  etaDate: string | null;
+  sources: IncomingSourceSummary[];
+};
+
 type PurchaseOrderTotals = {
   subtotalHt: number;
   taxTotal: number;
@@ -187,6 +206,10 @@ function toDecimal(value: string | null | undefined, fallback = 0): number {
 
 function cleanText(value?: string | null): string {
   return String(value ?? "").trim();
+}
+
+function normalizeSkuKey(value?: string | null): string {
+  return cleanText(value).replace(/\s+/g, " ").toUpperCase();
 }
 
 function round2(value: number): number {
@@ -794,6 +817,19 @@ export async function createPurchaseOrderDraft(
     lineCount: resolvedLines.length,
     totals,
   });
+  await safeLogAuditEvent(admin, shopDomain, {
+    eventType: "purchase_order.created_draft",
+    entityType: "purchase_order",
+    entityId: purchaseOrderGid,
+    locationId: destination.id,
+    status: "success",
+    actor,
+    payload: {
+      number,
+      lineCount: resolvedLines.length,
+      totals,
+    },
+  });
 
   return { purchaseOrderGid, number };
 }
@@ -838,6 +874,18 @@ export async function upsertIncomingPurchaseOrderFromPrestaOrder(
   if (existingNode) {
     const detail = await getPurchaseOrderDetail(admin, shopDomain, existingNode.id);
     if (detail.order.status === "RECEIVED") {
+      await safeLogAuditEvent(admin, shopDomain, {
+        eventType: "purchase_order.upsert_from_presta.skipped_received",
+        entityType: "purchase_order",
+        entityId: detail.order.gid,
+        locationId: detail.order.destinationLocationId,
+        prestaOrderId,
+        status: "info",
+        actor: normalizedActor,
+        payload: {
+          number: detail.order.number,
+        },
+      });
       return {
         purchaseOrderGid: detail.order.gid,
         number: detail.order.number,
@@ -887,6 +935,19 @@ export async function upsertIncomingPurchaseOrderFromPrestaOrder(
     });
 
     const updatedDetail = await getPurchaseOrderDetail(admin, shopDomain, detail.order.gid);
+    await safeLogAuditEvent(admin, shopDomain, {
+      eventType: "purchase_order.upsert_from_presta.updated",
+      entityType: "purchase_order",
+      entityId: updatedDetail.order.gid,
+      locationId: updatedDetail.order.destinationLocationId,
+      prestaOrderId,
+      status: "success",
+      actor: normalizedActor,
+      payload: {
+        number: updatedDetail.order.number,
+        lineCount: updatedDetail.lines.length,
+      },
+    });
     return {
       purchaseOrderGid: updatedDetail.order.gid,
       number: updatedDetail.order.number,
@@ -920,6 +981,19 @@ export async function upsertIncomingPurchaseOrderFromPrestaOrder(
   });
 
   const detail = await getPurchaseOrderDetail(admin, shopDomain, created.purchaseOrderGid);
+  await safeLogAuditEvent(admin, shopDomain, {
+    eventType: "purchase_order.upsert_from_presta.created",
+    entityType: "purchase_order",
+    entityId: detail.order.gid,
+    locationId: detail.order.destinationLocationId,
+    prestaOrderId,
+    status: "success",
+    actor: normalizedActor,
+    payload: {
+      number: detail.order.number,
+      lineCount: detail.lines.length,
+    },
+  });
   return {
     purchaseOrderGid: detail.order.gid,
     number: detail.order.number,
@@ -958,6 +1032,49 @@ export async function duplicatePurchaseOrder(
   });
 }
 
+export async function updatePurchaseOrderExpectedArrival(
+  admin: AdminClient,
+  shopDomain: string,
+  actor: string,
+  purchaseOrderGid: string,
+  expectedArrivalAt: string | null,
+): Promise<{ previousExpectedArrivalAt: string; nextExpectedArrivalAt: string }> {
+  const detail = await getPurchaseOrderDetail(admin, shopDomain, purchaseOrderGid);
+  if (detail.order.status === "RECEIVED") {
+    throw new Error("Impossible de modifier l'ETA d'un réassort déjà reçu.");
+  }
+  if (detail.order.status === "CANCELED") {
+    throw new Error("Impossible de modifier l'ETA d'un réassort annulé.");
+  }
+
+  const nextExpectedArrivalAt = toIsoOrEmpty(expectedArrivalAt);
+  const previousExpectedArrivalAt = cleanText(detail.order.expectedArrivalAt);
+
+  await updateMetaobject(admin, purchaseOrderGid, [{ key: "expected_arrival_at", value: nextExpectedArrivalAt }]);
+  await writeAudit(admin, detail.order.number, purchaseOrderGid, "ETA_UPDATED", actor, {
+    previousExpectedArrivalAt: previousExpectedArrivalAt || null,
+    nextExpectedArrivalAt: nextExpectedArrivalAt || null,
+  });
+  await safeLogAuditEvent(admin, shopDomain, {
+    eventType: "purchase_order.eta.updated",
+    entityType: "purchase_order",
+    entityId: purchaseOrderGid,
+    locationId: detail.order.destinationLocationId,
+    status: "success",
+    actor,
+    payload: {
+      number: detail.order.number,
+      previousExpectedArrivalAt: previousExpectedArrivalAt || null,
+      nextExpectedArrivalAt: nextExpectedArrivalAt || null,
+    },
+  });
+
+  return {
+    previousExpectedArrivalAt,
+    nextExpectedArrivalAt,
+  };
+}
+
 export async function cancelPurchaseOrder(
   admin: AdminClient,
   shopDomain: string,
@@ -970,6 +1087,17 @@ export async function cancelPurchaseOrder(
   }
   await updateMetaobject(admin, purchaseOrderGid, [{ key: "status", value: "CANCELED" }]);
   await writeAudit(admin, detail.order.number, purchaseOrderGid, "CANCELED", actor, {});
+  await safeLogAuditEvent(admin, shopDomain, {
+    eventType: "purchase_order.canceled",
+    entityType: "purchase_order",
+    entityId: purchaseOrderGid,
+    locationId: detail.order.destinationLocationId,
+    status: "success",
+    actor,
+    payload: {
+      number: detail.order.number,
+    },
+  });
 }
 
 export async function deletePurchaseOrder(
@@ -1011,6 +1139,18 @@ export async function deletePurchaseOrder(
       // Ignore if linked receipt no longer exists.
     }
   }
+  await safeLogAuditEvent(admin, shopDomain, {
+    eventType: "purchase_order.deleted",
+    entityType: "purchase_order",
+    entityId: purchaseOrderGid,
+    locationId: detail.order.destinationLocationId,
+    status: "success",
+    actor,
+    payload: {
+      number: detail.order.number,
+      linkedReceiptGid,
+    },
+  });
 }
 
 export async function hasRestockLinkedToReceipt(
@@ -1130,6 +1270,18 @@ export async function markPurchaseOrderIncoming(
   await writeAudit(admin, detail.order.number, purchaseOrderGid, "MARK_INCOMING", actor, {
     inventoryMutation: "none",
   });
+  await safeLogAuditEvent(admin, shopDomain, {
+    eventType: "purchase_order.mark_incoming",
+    entityType: "purchase_order",
+    entityId: purchaseOrderGid,
+    locationId: detail.order.destinationLocationId,
+    status: "success",
+    actor,
+    payload: {
+      number: detail.order.number,
+      lineCount: detail.lines.length,
+    },
+  });
 }
 
 export async function markPurchaseOrderReceived(
@@ -1201,6 +1353,233 @@ export async function markPurchaseOrderReceived(
     destinationLocationName: destination.name,
     availableAdjustedLines: deltas.length,
   });
+  await safeLogAuditEvent(admin, shopDomain, {
+    eventType: "purchase_order.mark_received",
+    entityType: "purchase_order",
+    entityId: purchaseOrderGid,
+    locationId: destination.id,
+    status: "success",
+    actor,
+    payload: {
+      number: detail.order.number,
+      availableAdjustedLines: deltas.length,
+      lineCount: relatedLines.length,
+    },
+  });
+}
+
+export async function getIncomingSnapshotForSku(
+  admin: AdminClient,
+  shopDomain: string,
+  input: {
+    locationId: string;
+    sku?: string | null;
+    inventoryItemId?: string | null;
+  },
+): Promise<{
+  incomingQty: number;
+  etaDate: string | null;
+  sources: Array<{
+    purchaseOrderGid: string;
+    number: string;
+    expectedArrivalAt: string;
+    quantity: number;
+  }>;
+}> {
+  await ensureMetaobjectDefinitions(admin, shopDomain);
+  const types = await getMetaTypes(admin);
+  const skuFilter = normalizeSkuKey(input.sku);
+  const inventoryFilter = cleanText(input.inventoryItemId);
+  if (!skuFilter && !inventoryFilter) {
+    return { incomingQty: 0, etaDate: null, sources: [] };
+  }
+
+  const orders = (await listMetaobjectsSafe(admin, types.purchaseOrder))
+    .filter((node) => parseStatus(fieldValue(node, "status")) === "INCOMING")
+    .filter((node) => fieldValue(node, "destination_location_id") === input.locationId);
+
+  const sources: Array<{
+    purchaseOrderGid: string;
+    number: string;
+    expectedArrivalAt: string;
+    quantity: number;
+  }> = [];
+
+  for (const order of orders) {
+    const lines = await listMetaobjectsByPurchaseOrder(admin, types.purchaseOrderLine, order.id);
+    let quantity = 0;
+    for (const line of lines) {
+      const sku = normalizeSkuKey(fieldValue(line, "sku"));
+      const inventoryItemId = fieldValue(line, "inventory_item_gid");
+      const isMatch = (skuFilter && sku === skuFilter) || (inventoryFilter && inventoryItemId === inventoryFilter);
+      if (!isMatch) continue;
+      const ordered = toInt(fieldValue(line, "quantity_ordered"), 0);
+      const received = toInt(fieldValue(line, "quantity_received"), 0);
+      quantity += Math.max(0, ordered - received);
+    }
+    if (quantity <= 0) continue;
+    sources.push({
+      purchaseOrderGid: order.id,
+      number: fieldValue(order, "number"),
+      expectedArrivalAt: fieldValue(order, "expected_arrival_at"),
+      quantity,
+    });
+  }
+
+  const incomingQty = sources.reduce((sum, source) => sum + source.quantity, 0);
+  const etaCandidates = sources
+    .map((source) => source.expectedArrivalAt)
+    .filter(Boolean)
+    .map((value) => ({ value, ms: Date.parse(value) }))
+    .filter((item) => Number.isFinite(item.ms))
+    .sort((left, right) => left.ms - right.ms);
+
+  return {
+    incomingQty,
+    etaDate: etaCandidates[0]?.value ?? null,
+    sources: sources.sort((left, right) => right.quantity - left.quantity),
+  };
+}
+
+export async function listIncomingForLocation(
+  admin: AdminClient,
+  shopDomain: string,
+  input: {
+    locationId: string;
+    query?: string | null;
+    limit?: number | null;
+  },
+): Promise<{ totalCount: number; items: IncomingLocationItem[] }> {
+  await ensureMetaobjectDefinitions(admin, shopDomain);
+  const types = await getMetaTypes(admin);
+  const limitRaw = Math.trunc(Number(input.limit ?? 30));
+  const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(100, limitRaw)) : 30;
+  const query = cleanText(input.query).toLowerCase();
+
+  const orders = (await listMetaobjectsSafe(admin, types.purchaseOrder))
+    .filter((node) => parseStatus(fieldValue(node, "status")) === "INCOMING")
+    .filter((node) => fieldValue(node, "destination_location_id") === input.locationId);
+
+  if (!orders.length) {
+    return { totalCount: 0, items: [] };
+  }
+
+  const lineGroups = await Promise.all(
+    orders.map(async (order) => ({
+      order,
+      lines: await listMetaobjectsByPurchaseOrder(admin, types.purchaseOrderLine, order.id),
+    })),
+  );
+
+  const map = new Map<
+    string,
+    IncomingLocationItem & {
+      sourceMap: Map<string, IncomingSourceSummary>;
+    }
+  >();
+
+  for (const { order, lines } of lineGroups) {
+    const sourceBase = {
+      purchaseOrderGid: order.id,
+      number: fieldValue(order, "number"),
+      expectedArrivalAt: fieldValue(order, "expected_arrival_at"),
+    };
+
+    for (const line of lines) {
+      const ordered = toInt(fieldValue(line, "quantity_ordered"), 0);
+      const received = toInt(fieldValue(line, "quantity_received"), 0);
+      const quantity = Math.max(0, ordered - received);
+      if (quantity <= 0) continue;
+
+      const sku = cleanText(fieldValue(line, "sku"));
+      const inventoryItemId = cleanText(fieldValue(line, "inventory_item_gid"));
+      const key = inventoryItemId || (sku ? `sku:${normalizeSkuKey(sku)}` : "");
+      if (!key) continue;
+
+      const existing = map.get(key);
+      if (!existing) {
+        map.set(key, {
+          sku,
+          inventoryItemId,
+          productTitle: fieldValue(line, "product_title"),
+          variantTitle: fieldValue(line, "variant_title"),
+          imageUrl: fieldValue(line, "image_url"),
+          incomingQty: quantity,
+          etaDate: sourceBase.expectedArrivalAt || null,
+          sourceMap: new Map([
+            [
+              sourceBase.purchaseOrderGid,
+              {
+                ...sourceBase,
+                quantity,
+              },
+            ],
+          ]),
+          sources: [],
+        });
+        continue;
+      }
+
+      existing.incomingQty += quantity;
+      if (!existing.productTitle) existing.productTitle = fieldValue(line, "product_title");
+      if (!existing.variantTitle) existing.variantTitle = fieldValue(line, "variant_title");
+      if (!existing.imageUrl) existing.imageUrl = fieldValue(line, "image_url");
+
+      const previous = existing.sourceMap.get(sourceBase.purchaseOrderGid);
+      existing.sourceMap.set(sourceBase.purchaseOrderGid, {
+        ...sourceBase,
+        quantity: quantity + (previous?.quantity ?? 0),
+      });
+
+      const currentEtaMs = existing.etaDate ? Date.parse(existing.etaDate) : NaN;
+      const candidateEtaMs = sourceBase.expectedArrivalAt ? Date.parse(sourceBase.expectedArrivalAt) : NaN;
+      if (!Number.isFinite(currentEtaMs) && Number.isFinite(candidateEtaMs)) {
+        existing.etaDate = sourceBase.expectedArrivalAt;
+      } else if (Number.isFinite(currentEtaMs) && Number.isFinite(candidateEtaMs) && candidateEtaMs < currentEtaMs) {
+        existing.etaDate = sourceBase.expectedArrivalAt;
+      }
+    }
+  }
+
+  const items = Array.from(map.values()).map((row) => ({
+    sku: row.sku,
+    inventoryItemId: row.inventoryItemId,
+    productTitle: row.productTitle,
+    variantTitle: row.variantTitle,
+    imageUrl: row.imageUrl,
+    incomingQty: row.incomingQty,
+    etaDate: row.etaDate,
+    sources: Array.from(row.sourceMap.values()).sort((left, right) => right.quantity - left.quantity),
+  }));
+
+  const filtered = query
+    ? items.filter((item) => {
+        const needle = query;
+        const label = `${item.productTitle} ${item.variantTitle} ${item.sku}`.toLowerCase();
+        if (label.includes(needle)) return true;
+        return item.sources.some((source) => source.number.toLowerCase().includes(needle));
+      })
+    : items;
+
+  const sorted = filtered.sort((left, right) => {
+    const leftEta = left.etaDate ? Date.parse(left.etaDate) : NaN;
+    const rightEta = right.etaDate ? Date.parse(right.etaDate) : NaN;
+    if (Number.isFinite(leftEta) && Number.isFinite(rightEta) && leftEta !== rightEta) {
+      return leftEta - rightEta;
+    }
+    if (Number.isFinite(leftEta) !== Number.isFinite(rightEta)) {
+      return Number.isFinite(leftEta) ? -1 : 1;
+    }
+    if (left.incomingQty !== right.incomingQty) {
+      return right.incomingQty - left.incomingQty;
+    }
+    return left.sku.localeCompare(right.sku, "fr");
+  });
+
+  return {
+    totalCount: sorted.length,
+    items: sorted.slice(0, limit),
+  };
 }
 
 export async function logPurchaseOrderEmailSent(
@@ -1212,6 +1591,15 @@ export async function logPurchaseOrderEmailSent(
 ): Promise<void> {
   const detail = await getPurchaseOrderDetail(admin, shopDomain, purchaseOrderGid);
   await writeAudit(admin, detail.order.number, purchaseOrderGid, "EMAIL_SENT", actor, payload);
+  await safeLogAuditEvent(admin, shopDomain, {
+    eventType: "purchase_order.email_sent",
+    entityType: "purchase_order",
+    entityId: purchaseOrderGid,
+    locationId: detail.order.destinationLocationId,
+    status: "success",
+    actor,
+    payload,
+  });
 }
 
 export function defaultPurchaseOrderSupplier() {

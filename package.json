@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "build": "react-router build",
-    "dev": "shopify app dev",
+    "dev": "shopify app dev -c shopify.app.import-stock-boutique-dev.toml",
+    "dev:classic": "shopify app dev -c shopify.app.import-stock-boutique.toml",
     "dev:local": "powershell -ExecutionPolicy Bypass -File scripts/dev-local.ps1",
     "config:link": "shopify app config link",
     "generate": "shopify app generate",
@@ -36,6 +37,7 @@
     "@shopify/app-bridge-react": "^4.2.4",
     "@shopify/polaris": "^13.9.5",
     "@shopify/polaris-icons": "^9.3.1",
+    "@shopify/retail-ui-extensions": "^1.7.0",
     "@shopify/shopify-app-react-router": "^1.1.0",
     "@shopify/shopify-app-session-storage-sqlite": "^5.0.5",
     "@types/nodemailer": "^7.0.11",

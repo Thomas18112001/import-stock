@@ -20,11 +20,14 @@ test("cron secret accepte le header X-CRON-SECRET", async () => {
   assert.doesNotThrow(() => assertCronSecret(request, "top-secret"));
 });
 
-test("cron secret accepte la query cron_secret", async () => {
+test("cron secret refuse la query cron_secret", async () => {
   const { assertCronSecret } = await loadCronGuard();
   const request = new Request("https://example.com/api/cron/synchroniserhroniser?cron_secret=top-secret");
 
-  assert.doesNotThrow(() => assertCronSecret(request, "top-secret"));
+  assert.throws(
+    () => assertCronSecret(request, "top-secret"),
+    (error: unknown) => error instanceof Response && error.status === 401,
+  );
 });
 
 test("cron secret refuse un secret absent ou invalide", async () => {

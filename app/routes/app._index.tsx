@@ -60,6 +60,15 @@ function receiptSortTimestamp(receipt: { prestaDateUpd: string; prestaDateAdd: s
   return Math.max(toSortableMs(receipt.prestaDateUpd), toSortableMs(receipt.prestaDateAdd), toSortableMs(receipt.updatedAt));
 }
 
+function formatDisplayDate(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "-";
+  const normalized = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(trimmed) ? `${trimmed}Z` : trimmed;
+  const ms = Date.parse(normalized);
+  if (!Number.isFinite(ms)) return trimmed;
+  return new Date(ms).toLocaleString("fr-FR");
+}
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const { admin, shop } = await requireAdmin(request);
@@ -250,7 +259,9 @@ export default function DashboardPage() {
       <IndexTable.Cell>
         <Badge tone={badgeTone(receipt.status)}>{statusLabel(receipt.status)}</Badge>
       </IndexTable.Cell>
-      <IndexTable.Cell>{receipt.prestaDateAdd || "-"}</IndexTable.Cell>
+      <IndexTable.Cell>{formatDisplayDate(receipt.prestaDateAdd)}</IndexTable.Cell>
+      <IndexTable.Cell>{formatDisplayDate(receipt.prestaDateUpd)}</IndexTable.Cell>
+      <IndexTable.Cell>{formatDisplayDate(receipt.updatedAt)}</IndexTable.Cell>
       <IndexTable.Cell>
         <Button
           submit={false}
@@ -521,7 +532,9 @@ export default function DashboardPage() {
                     { title: "ID Presta" },
                     { title: "Référence" },
                     { title: "Statut" },
-                    { title: "Date" },
+                    { title: "Date commande" },
+                    { title: "Date update Presta" },
+                    { title: "Date import app" },
                     { title: "Action" },
                   ]}
                 >

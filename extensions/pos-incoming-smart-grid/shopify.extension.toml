@@ -1,0 +1,27 @@
+api_version = "2026-01"
+
+[[extensions]]
+type = "ui_extension"
+name = "t:name"
+uid = "5a7b0b67-4f55-42b3-c485-7f5e7cf5c828d6f68088"
+handle = "pos-incoming-smart-grid"
+description = "Vignette POS pour les produits en arrivage"
+
+[extensions.capabilities]
+network_access = true
+
+[extensions.settings]
+
+[[extensions.settings.fields]]
+key = "api_base_url"
+type = "single_line_text_field"
+name = "API base URL"
+description = "URL publique de l'application (ex: https://app.example.com)"
+
+[[extensions.targeting]]
+module = "./src/Tile.jsx"
+target = "pos.home.tile.render"
+
+[[extensions.targeting]]
+module = "./src/Modal.jsx"
+target = "pos.home.modal.render"

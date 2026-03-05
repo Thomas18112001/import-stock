@@ -1,6 +1,7 @@
 ﻿import type { ActionFunctionArgs } from "react-router";
 import { assertActionRateLimit, getClientIp } from "../services/action-guard.server";
 import { requireAdmin } from "../services/auth.server";
+import { safeLogAuditEvent } from "../services/auditLogService";
 import { applyReceipt } from "../services/receiptService";
 import { toPublicErrorMessage } from "../utils/error.server";
 import { decodeReceiptId } from "../utils/receiptId";
@@ -40,16 +41,38 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       skippedSkus,
       actor,
     });
+    await safeLogAuditEvent(admin, shop, {
+      eventType: "receipt.apply.triggered",
+      entityType: "receipt",
+      entityId: receiptGid,
+      locationId,
+      status: "success",
+      actor,
+      payload: {
+        skippedSkus,
+        restockOrderId: result.restockOrderId,
+        restockOrderNumber: result.restockOrderNumber,
+      },
+    });
 
     return Response.json({
       ok: true,
       ...result,
     });
   } catch (error) {
+    await safeLogAuditEvent(admin, shop, {
+      eventType: "receipt.apply.error",
+      entityType: "receipt",
+      entityId: receiptGid,
+      locationId,
+      status: "error",
+      actor,
+      message: error instanceof Error ? error.message : "Erreur apply receipt",
+      payload: { skippedSkus },
+    });
     return Response.json(
       { ok: false, error: toPublicErrorMessage(error, "Erreur de mise en arrivage.") },
       { status: 400 },
     );
   }
 };
-

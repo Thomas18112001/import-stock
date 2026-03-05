@@ -6,9 +6,7 @@ import { parseNonNegativeIntInput, parsePositiveIntInput } from "../utils/valida
 function assertDebugAccess(request: Request): void {
   const isDev = process.env.NODE_ENV === "development";
   const configuredToken = String(process.env.DEBUG_SYNC_TOKEN ?? "").trim();
-  const providedToken = String(
-    request.headers.get("x-debug-token") ?? new URL(request.url).searchParams.get("token") ?? "",
-  ).trim();
+  const providedToken = String(request.headers.get("x-debug-token") ?? "").trim();
 
   if (isDev) return;
   if (!configuredToken || providedToken !== configuredToken) {

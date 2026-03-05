@@ -55,12 +55,28 @@ export default [
     "routes/actions.purchase-orders.$purchaseOrderGid.receive.tsx",
   ),
   route(
+    "actions/reassorts-magasin/:purchaseOrderGid/modifier-eta",
+    "routes/actions.purchase-orders.$purchaseOrderGid.update-eta.tsx",
+  ),
+  route(
     "actions/reassorts-magasin/:purchaseOrderGid/envoyer",
     "routes/actions.purchase-orders.$purchaseOrderGid.send.tsx",
   ),
+  route("actions/planification/seuils", "routes/actions.planning.thresholds.tsx"),
+  route("actions/planification/creer-po", "routes/actions.planning.create-po.tsx"),
+  route("actions/fournisseurs", "routes/actions.suppliers.tsx"),
+  route("actions/alertes/configuration", "routes/actions.alerts.config.tsx"),
+  route("actions/alertes/statut", "routes/actions.alerts.status.tsx"),
 
   route("api/cron/synchroniser", "routes/api.cron.sync.tsx"),
+  route("api/cron/alertes", "routes/api.cron.alerts.tsx"),
   route("api/debug/sync-presta", "routes/api.debug.presta-sync.tsx"),
+  route("api/pos/incoming", "routes/api.pos.incoming.tsx"),
+  route("api/pos/incoming-search", "routes/api.pos.incoming-search.tsx"),
+  route("api/sales/agg", "routes/api.sales.agg.tsx"),
+  route("api/sales/rate", "routes/api.sales.rate.tsx"),
+  route("api/inventory/sales-rate", "routes/api.inventory.sales-rate.tsx"),
+  route("api/inventory/forecast", "routes/api.inventory.forecast.tsx"),
   route("api/reassorts", "routes/api.reassorts.tsx"),
   route("api/reassorts/from-prestashop-order", "routes/api.reassorts.from-prestashop-order.tsx"),
   route("api/reassorts/pdf", "routes/api.reassorts.pdf.tsx"),
@@ -72,6 +88,11 @@ export default [
   layout("routes/app.tsx", [
     index("routes/app._index.tsx"),
     route("tableau-de-bord", "routes/app.tableau-de-bord.tsx"),
+    route("planification-stock", "routes/app.planification-stocks.tsx"),
+    route("stats-inventaire", "routes/app.stats-inventaire.tsx"),
+    route("fournisseurs", "routes/app.fournisseurs.tsx"),
+    route("sante-inventaire", "routes/app.inventory-health.tsx"),
+    route("alertes-inventaire", "routes/app.alertes-inventaire.tsx"),
     route("aide-autorisations", "routes/app.help.scopes.tsx"),
     route("produits-en-reception", "routes/app.receipts.tsx", [
       index("routes/app.receipts._index.tsx"),
@@ -82,5 +103,6 @@ export default [
       route("nouveau", "routes/app.purchase-orders.new.tsx"),
       route(":purchaseOrderIdEnc", "routes/app.purchase-orders.$purchaseOrderIdEnc.tsx"),
     ]),
+    route(":legacySection", "routes/legacy.section-redirect.tsx"),
   ]),
 ] satisfies RouteConfig;

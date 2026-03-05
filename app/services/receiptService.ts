@@ -26,6 +26,7 @@ import {
 } from "../utils/prestaCheckpoint";
 import { isShopifyGid } from "../utils/validators";
 import type { AdminClient } from "./auth.server";
+import { safeLogAuditEvent } from "./auditLogService";
 import { hasRestockLinkedToReceipt, upsertIncomingPurchaseOrderFromPrestaOrder } from "./purchaseOrderService";
 import {
   getOrderById,
@@ -736,6 +737,20 @@ async function ensureReceiptImported(
 
   const receiptId = await upsertMetaobjectByHandle(admin, types.receipt, receiptHandle(order.id), receiptFields);
   await upsertReceiptLines(admin, types.receiptLine, receiptId, order.id, resolvedImport.resolvedLines);
+  await safeLogAuditEvent(admin, shopDomain, {
+    eventType: "receipt.imported",
+    entityType: "receipt",
+    entityId: receiptId,
+    locationId,
+    prestaOrderId: order.id,
+    status: "success",
+    message: `Commande Presta ${order.id} importee`,
+    payload: {
+      prestaReference: order.reference,
+      receiptStatus: resolvedImport.status,
+      lineCount: resolvedImport.resolvedLines.length,
+    },
+  });
   return { action: "import", reason: "new", receiptGid: receiptId };
 }
 
@@ -1072,6 +1087,28 @@ export async function syncRun(
     locationId: boutique.locationId,
     elapsedMs: elapsedMs(startedAt),
   });
+  await safeLogAuditEvent(admin, shopDomain, {
+    eventType: "sync.completed",
+    entityType: "sync",
+    entityId: boutique.locationId,
+    locationId: boutique.locationId,
+    status: "success",
+    message: `Synchronisation terminee (${imported} importee(s))`,
+    payload: {
+      manual,
+      syncDay: manualDayRange?.day ?? null,
+      scanned,
+      imported,
+      importedByIdScan: idImported,
+      importedByDateScan: dateImported,
+      scannedByIdScan: idScanned,
+      scannedByDateScan: dateScanned,
+      currentCursor,
+      lastPrestaOrderId: nextCursorMap[boutique.locationId] ?? currentCursor,
+      checkpoint: nextCheckpointMap[boutique.locationId] ?? null,
+      elapsedMs: elapsedMs(startedAt),
+    },
+  });
   return {
     imported,
     syncDay: manualDayRange?.day ?? null,
@@ -1115,6 +1152,18 @@ export async function importById(
       locationId: boutique.locationId,
       lastPrestaOrderId,
     });
+    await safeLogAuditEvent(admin, shopDomain, {
+      eventType: "receipt.import_by_id.duplicate",
+      entityType: "presta_order",
+      entityId: String(prestaOrderId),
+      locationId: boutique.locationId,
+      prestaOrderId,
+      status: "info",
+      payload: {
+        duplicateBy: existing.duplicateBy,
+        receiptGid: existing.receipt.gid,
+      },
+    });
     return { created: false, receiptGid: existing.receipt.gid, duplicateBy: existing.duplicateBy, lastPrestaOrderId };
   }
   if (existing?.duplicateBy === "reference" && existing.receipt.prestaOrderId !== order.id) {
@@ -1154,6 +1203,18 @@ export async function importById(
     locationId: boutique.locationId,
     currentCursor,
     lastPrestaOrderId: currentCursor,
+  });
+  await safeLogAuditEvent(admin, shopDomain, {
+    eventType: "receipt.import_by_id.created",
+    entityType: "presta_order",
+    entityId: String(prestaOrderId),
+    locationId: boutique.locationId,
+    prestaOrderId,
+    status: "success",
+    payload: {
+      receiptGid: importDecision.receiptGid,
+      lastPrestaOrderId: currentCursor,
+    },
   });
   return {
     created: true,
@@ -1284,6 +1345,291 @@ export async function debugEvaluatePrestaOrders(
     effectiveSortKey,
     total: orders.length,
     decisions,
+  };
+}
+
+export type PrestaOrderSyncDiagnosis = {
+  prestaOrderId: number;
+  locationId: string;
+  prestaCustomerId: number;
+  found: boolean;
+  reason:
+    | "not_found"
+    | "customer_mismatch"
+    | "duplicate_by_id"
+    | "older_than_or_equal_cursor"
+    | "checkpoint_already_seen"
+    | "missing_lines"
+    | "blocking_lines"
+    | "ready_to_import";
+  message: string;
+  order: {
+    id: number;
+    customerId: number;
+    reference: string;
+    currentState: string;
+    dateAdd: string;
+    dateUpd: string;
+  } | null;
+  existingReceipt: {
+    gid: string;
+    duplicateBy: "id" | "reference";
+    prestaOrderId: number;
+    status: string;
+  } | null;
+  syncState: {
+    currentCursor: number;
+    effectiveSinceId: number;
+    currentCheckpoint: PrestaCheckpoint;
+    dateLookbackStart: string;
+  };
+  lineDiagnostics: {
+    total: number;
+    resolved: number;
+    missing: number;
+    invalidQty: number;
+  };
+};
+
+export async function diagnosePrestaOrderSync(
+  admin: AdminClient,
+  shopDomain: string,
+  input: { locationId: string; prestaOrderId: number },
+): Promise<PrestaOrderSyncDiagnosis> {
+  await ensureMetaobjectDefinitions(admin, shopDomain);
+  const boutique = await resolveBoutiqueContext(admin, input.locationId);
+  const syncState = await getSyncState(admin);
+  const currentCursor = syncState.cursorByLocation[boutique.locationId] ?? 0;
+  const effectiveSinceId = computePrestaSinceId(currentCursor);
+  const currentCheckpoint = clampCheckpointToUpperBound(
+    normalizePrestaCheckpoint(syncState.prestaCheckpointByLocation[boutique.locationId]),
+    formatPrestaDateTime(new Date()),
+  );
+  const dateLookbackStart = computeCheckpointLookbackStart(currentCheckpoint, PRESTA_DATE_LOOKBACK_MINUTES);
+  const baseResult = {
+    prestaOrderId: input.prestaOrderId,
+    locationId: boutique.locationId,
+    prestaCustomerId: boutique.prestaCustomerId,
+    syncState: {
+      currentCursor,
+      effectiveSinceId,
+      currentCheckpoint,
+      dateLookbackStart,
+    },
+    lineDiagnostics: {
+      total: 0,
+      resolved: 0,
+      missing: 0,
+      invalidQty: 0,
+    },
+  };
+
+  let order: PrestaOrder | null = null;
+  try {
+    order = await getOrderById(input.prestaOrderId);
+  } catch {
+    order = null;
+  }
+  if (!order) {
+    return {
+      ...baseResult,
+      found: false,
+      reason: "not_found",
+      message: "Commande introuvable via l'API PrestaShop.",
+      order: null,
+      existingReceipt: null,
+    };
+  }
+  if (order.customerId !== boutique.prestaCustomerId) {
+    return {
+      ...baseResult,
+      found: true,
+      reason: "customer_mismatch",
+      message: `Commande trouvee mais rattachee au client Presta ${order.customerId} (attendu: ${boutique.prestaCustomerId}).`,
+      order: {
+        id: order.id,
+        customerId: order.customerId,
+        reference: order.reference,
+        currentState: order.currentState,
+        dateAdd: order.dateAdd,
+        dateUpd: order.dateUpd,
+      },
+      existingReceipt: null,
+    };
+  }
+
+  const existing = await getExistingReceiptForOrder(admin, shopDomain, order);
+  const existingDecision = classifyExistingReceiptForImport(existing, order.id);
+  if (existing && existingDecision === "duplicate_by_id") {
+    return {
+      ...baseResult,
+      found: true,
+      reason: "duplicate_by_id",
+      message: "Commande deja importee pour cette boutique.",
+      order: {
+        id: order.id,
+        customerId: order.customerId,
+        reference: order.reference,
+        currentState: order.currentState,
+        dateAdd: order.dateAdd,
+        dateUpd: order.dateUpd,
+      },
+      existingReceipt: {
+        gid: existing.receipt.gid,
+        duplicateBy: existing.duplicateBy,
+        prestaOrderId: existing.receipt.prestaOrderId,
+        status: existing.receipt.status,
+      },
+    };
+  }
+
+  if (isOrderOlderThanOrEqualCursor(order.id, effectiveSinceId)) {
+    return {
+      ...baseResult,
+      found: true,
+      reason: "older_than_or_equal_cursor",
+      message: `Commande ignoree par curseur (order_id ${order.id} <= ${effectiveSinceId}). Import manuel requis.`,
+      order: {
+        id: order.id,
+        customerId: order.customerId,
+        reference: order.reference,
+        currentState: order.currentState,
+        dateAdd: order.dateAdd,
+        dateUpd: order.dateUpd,
+      },
+      existingReceipt: existing
+        ? {
+            gid: existing.receipt.gid,
+            duplicateBy: existing.duplicateBy,
+            prestaOrderId: existing.receipt.prestaOrderId,
+            status: existing.receipt.status,
+          }
+        : null,
+    };
+  }
+
+  if (!isOrderAfterCheckpoint(order.dateUpd, order.id, currentCheckpoint)) {
+    return {
+      ...baseResult,
+      found: true,
+      reason: "checkpoint_already_seen",
+      message: "Commande deja couverte par le checkpoint date_upd/order_id.",
+      order: {
+        id: order.id,
+        customerId: order.customerId,
+        reference: order.reference,
+        currentState: order.currentState,
+        dateAdd: order.dateAdd,
+        dateUpd: order.dateUpd,
+      },
+      existingReceipt: existing
+        ? {
+            gid: existing.receipt.gid,
+            duplicateBy: existing.duplicateBy,
+            prestaOrderId: existing.receipt.prestaOrderId,
+            status: existing.receipt.status,
+          }
+        : null,
+    };
+  }
+
+  const lines = await getOrderDetails(order.id);
+  if (!lines.length) {
+    return {
+      ...baseResult,
+      found: true,
+      reason: "missing_lines",
+      message: "Aucune ligne retournee par /api/order_details pour cette commande.",
+      order: {
+        id: order.id,
+        customerId: order.customerId,
+        reference: order.reference,
+        currentState: order.currentState,
+        dateAdd: order.dateAdd,
+        dateUpd: order.dateUpd,
+      },
+      existingReceipt: existing
+        ? {
+            gid: existing.receipt.gid,
+            duplicateBy: existing.duplicateBy,
+            prestaOrderId: existing.receipt.prestaOrderId,
+            status: existing.receipt.status,
+          }
+        : null,
+      lineDiagnostics: {
+        total: 0,
+        resolved: 0,
+        missing: 0,
+        invalidQty: 0,
+      },
+    };
+  }
+
+  const resolvedBySku = await resolveSkus(
+    admin,
+    Array.from(new Set(lines.map((line) => line.sku).filter(Boolean))),
+  );
+  const invalidQty = lines.filter((line) => line.qty <= 0).length;
+  const missing = lines.filter((line) => line.qty > 0 && !resolvedBySku.get(line.sku)).length;
+  const resolved = lines.length - invalidQty - missing;
+  if (invalidQty > 0 || missing > 0) {
+    return {
+      ...baseResult,
+      found: true,
+      reason: "blocking_lines",
+      message: "Commande detectee mais certaines lignes sont invalides ou introuvables dans Shopify.",
+      order: {
+        id: order.id,
+        customerId: order.customerId,
+        reference: order.reference,
+        currentState: order.currentState,
+        dateAdd: order.dateAdd,
+        dateUpd: order.dateUpd,
+      },
+      existingReceipt: existing
+        ? {
+            gid: existing.receipt.gid,
+            duplicateBy: existing.duplicateBy,
+            prestaOrderId: existing.receipt.prestaOrderId,
+            status: existing.receipt.status,
+          }
+        : null,
+      lineDiagnostics: {
+        total: lines.length,
+        resolved,
+        missing,
+        invalidQty,
+      },
+    };
+  }
+
+  return {
+    ...baseResult,
+    found: true,
+    reason: "ready_to_import",
+    message: "Commande eligible a l'import automatique ou manuel.",
+    order: {
+      id: order.id,
+      customerId: order.customerId,
+      reference: order.reference,
+      currentState: order.currentState,
+      dateAdd: order.dateAdd,
+      dateUpd: order.dateUpd,
+    },
+    existingReceipt: existing
+      ? {
+          gid: existing.receipt.gid,
+          duplicateBy: existing.duplicateBy,
+          prestaOrderId: existing.receipt.prestaOrderId,
+          status: existing.receipt.status,
+        }
+      : null,
+    lineDiagnostics: {
+      total: lines.length,
+      resolved,
+      missing,
+      invalidQty,
+    },
   };
 }
 
@@ -1720,6 +2066,21 @@ export async function applyReceipt(
       restockOrderNumber: restockOrder.number,
       elapsedMs: elapsedMs(startedAt),
     });
+    await safeLogAuditEvent(admin, shopDomain, {
+      eventType: "receipt.mark_incoming",
+      entityType: "receipt",
+      entityId: detail.receipt.gid,
+      locationId: boutique.locationId,
+      prestaOrderId: detail.receipt.prestaOrderId,
+      status: "success",
+      payload: {
+        restockOrderId: restockOrder.purchaseOrderGid,
+        restockOrderNumber: restockOrder.number,
+        restockCreated: restockOrder.created,
+        lineCount: aggregated.length,
+      },
+      actor: input.actor ?? "",
+    });
 
     return {
       restockOrderId: restockOrder.purchaseOrderGid,
@@ -1817,6 +2178,17 @@ export async function receiveReceipt(
       lines: adjustmentLines.length,
       elapsedMs: elapsedMs(startedAt),
     });
+    await safeLogAuditEvent(admin, shopDomain, {
+      eventType: "receipt.received",
+      entityType: "receipt",
+      entityId: receipt.gid,
+      locationId: adjustmentLocationId,
+      prestaOrderId: receipt.prestaOrderId,
+      status: "success",
+      payload: {
+        lineCount: adjustmentLines.length,
+      },
+    });
   });
 }
 
@@ -1887,6 +2259,17 @@ export async function rollbackReceipt(admin: AdminClient, shopDomain: string, re
       lines: adjustmentLines.length,
       elapsedMs: elapsedMs(startedAt),
     });
+    await safeLogAuditEvent(admin, shopDomain, {
+      eventType: "receipt.rollback",
+      entityType: "receipt",
+      entityId: receipt.gid,
+      locationId,
+      prestaOrderId: receipt.prestaOrderId,
+      status: "success",
+      payload: {
+        lineCount: adjustmentLines.length,
+      },
+    });
   });
 }
 
@@ -1939,8 +2322,17 @@ export async function deleteReceipt(
   }
 
   await deleteMetaobject(admin, receiptGid);
+  await safeLogAuditEvent(admin, shopDomain, {
+    eventType: "receipt.deleted",
+    entityType: "receipt",
+    entityId: receipt.gid,
+    locationId: receipt.locationId,
+    prestaOrderId: receipt.prestaOrderId,
+    status: "success",
+    payload: {
+      lineCount: relatedLines.length,
+    },
+  });
   return { deleted: true };
 }
-
-
 

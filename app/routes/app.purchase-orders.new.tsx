@@ -38,11 +38,18 @@ const EMPTY_LINE: DraftLine = {
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin } = await requireAdmin(request);
+  const url = new URL(request.url);
   const locations = await listLocations(admin);
+  const requestedLocationId = (url.searchParams.get("locationId") ?? "").trim();
+  const requestedSku = (url.searchParams.get("sku") ?? "").trim();
+  const defaultLocationId = locations.some((location) => location.id === requestedLocationId)
+    ? requestedLocationId
+    : (locations[0]?.id ?? "");
   return {
     locations,
     supplier: defaultPurchaseOrderSupplier(),
-    defaultLocationId: locations[0]?.id ?? "",
+    defaultLocationId,
+    initialSku: requestedSku,
   };
 };
 
@@ -62,7 +69,13 @@ export default function PurchaseOrderCreatePage() {
   const [supplierNotes, setSupplierNotes] = useState("");
   const [internalNotes, setInternalNotes] = useState("");
   const [currency, setCurrency] = useState(data.supplier.defaultCurrency);
-  const [lines, setLines] = useState<DraftLine[]>([{ ...EMPTY_LINE }]);
+  const [lines, setLines] = useState<DraftLine[]>([
+    {
+      ...EMPTY_LINE,
+      sku: data.initialSku || "",
+      supplierSku: data.initialSku || "",
+    },
+  ]);
 
   useEffect(() => {
     if (fetcher.data?.ok && fetcher.data.purchaseOrderGid) {

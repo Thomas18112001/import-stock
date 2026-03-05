@@ -49,6 +49,14 @@ function formatMoney(amount: number, currency: string): string {
   }).format(amount || 0);
 }
 
+function toDateInputValue(value: string): string {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return "";
+  const ms = Date.parse(trimmed);
+  if (!Number.isFinite(ms)) return "";
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const encoded = params.purchaseOrderIdEnc;
   if (!encoded) {
@@ -76,10 +84,12 @@ export default function PurchaseOrderDetailPage() {
   const cancelFetcher = useFetcher<{ ok: boolean; error?: string }>();
   const deleteFetcher = useFetcher<{ ok: boolean; error?: string }>();
   const sendFetcher = useFetcher<{ ok: boolean; error?: string }>();
+  const etaFetcher = useFetcher<{ ok: boolean; error?: string; nextExpectedArrivalAt?: string | null }>();
 
   const [supplierEmail, setSupplierEmail] = useState("");
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [expectedArrivalInput, setExpectedArrivalInput] = useState(toDateInputValue(data.detail.order.expectedArrivalAt));
 
   const downloadPdf = async () => {
     const rawUrl = withEmbeddedContext(
@@ -96,12 +106,10 @@ export default function PurchaseOrderDetailPage() {
         throw new Error("Session Shopify introuvable. Rechargez l'application puis réessayez.");
       }
 
-      const requestUrl = new URL(rawUrl, window.location.origin);
-      requestUrl.searchParams.set("id_token", token);
       const headers = new Headers();
       headers.set("Authorization", `Bearer ${token}`);
 
-      const response = await fetch(requestUrl.toString(), {
+      const response = await fetch(new URL(rawUrl, window.location.origin).toString(), {
         method: "GET",
         headers,
         credentials: "include",
@@ -136,10 +144,16 @@ export default function PurchaseOrderDetailPage() {
   }, [duplicateFetcher.data, embeddedNavigate]);
 
   useEffect(() => {
-    if (validateFetcher.data?.ok || receiveFetcher.data?.ok || cancelFetcher.data?.ok || sendFetcher.data?.ok) {
+    if (
+      validateFetcher.data?.ok ||
+      receiveFetcher.data?.ok ||
+      cancelFetcher.data?.ok ||
+      sendFetcher.data?.ok ||
+      etaFetcher.data?.ok
+    ) {
       revalidator.revalidate();
     }
-  }, [cancelFetcher.data, receiveFetcher.data, revalidator, sendFetcher.data, validateFetcher.data]);
+  }, [cancelFetcher.data, etaFetcher.data, receiveFetcher.data, revalidator, sendFetcher.data, validateFetcher.data]);
 
   useEffect(() => {
     if (deleteFetcher.data?.ok) {
@@ -147,10 +161,15 @@ export default function PurchaseOrderDetailPage() {
     }
   }, [deleteFetcher.data, embeddedNavigate]);
 
+  useEffect(() => {
+    setExpectedArrivalInput(toDateInputValue(data.detail.order.expectedArrivalAt));
+  }, [data.detail.order.expectedArrivalAt]);
+
   const canValidate = data.detail.order.status === "DRAFT";
   const canReceive = data.detail.order.status === "INCOMING";
   const canCancel = data.detail.order.status !== "RECEIVED" && data.detail.order.status !== "CANCELED";
   const canDelete = data.detail.order.status !== "RECEIVED";
+  const canEditEta = data.detail.order.status === "DRAFT" || data.detail.order.status === "INCOMING";
 
   const lineRows = useMemo(
     () =>
@@ -247,9 +266,44 @@ export default function PurchaseOrderDetailPage() {
               <Text as="p" variant="bodyMd">Total TTC: {formatMoney(data.detail.order.totalTtc, data.detail.order.currency)}</Text>
             </InlineStack>
 
+            {canEditEta ? (
+              <etaFetcher.Form
+                method="post"
+                action={`/actions/reassorts-magasin/${encodeReceiptIdForUrl(data.purchaseOrderGid)}/modifier-eta`}
+              >
+                <InlineStack gap="300" blockAlign="end" align="start" wrap>
+                  <Box minWidth="220px">
+                    <TextField
+                      label="ETA (modifiable en cas de retard)"
+                      type="date"
+                      value={expectedArrivalInput}
+                      onChange={setExpectedArrivalInput}
+                      autoComplete="off"
+                    />
+                  </Box>
+                  <input type="hidden" name="expectedArrivalAt" value={expectedArrivalInput} />
+                  <Button submit loading={etaFetcher.state !== "idle"}>
+                    Mettre à jour ETA
+                  </Button>
+                  {expectedArrivalInput ? (
+                    <Button
+                      submit={false}
+                      onClick={() => {
+                        setExpectedArrivalInput("");
+                      }}
+                    >
+                      Effacer
+                    </Button>
+                  ) : null}
+                </InlineStack>
+              </etaFetcher.Form>
+            ) : null}
+
             <Banner tone="info">
               Le dépôt n&apos;est jamais modifié dans Shopify. Le stock boutique est ajouté uniquement au clic &quot;Reçu en boutique&quot;.
             </Banner>
+            {etaFetcher.data?.error ? <Banner tone="critical">{etaFetcher.data.error}</Banner> : null}
+            {etaFetcher.data?.ok ? <Banner tone="success">ETA réassort mise à jour.</Banner> : null}
             {pdfError ? <Banner tone="critical">{pdfError}</Banner> : null}
             {pdfLoading ? <Banner tone="info">Téléchargement du PDF en cours...</Banner> : null}
           </BlockStack>
@@ -454,4 +508,3 @@ export default function PurchaseOrderDetailPage() {
     </Page>
   );
 }
-

@@ -3,8 +3,19 @@ import { requireAdmin } from "../services/auth.server";
 import { renderPurchaseOrderPdf } from "../services/purchaseOrderDocuments.server";
 import { decodeReceiptIdFromUrl } from "../utils/receiptId";
 import { isValidShopDomain } from "../utils/validators";
-import { unauthenticated } from "../shopify.server";
+import { authenticate, unauthenticated } from "../shopify.server";
 import { buildReassortPdfResponse } from "./api.reassorts.$restockId.pdf";
+
+function parseShopFromDest(destRaw: unknown): string {
+  const dest = String(destRaw ?? "").trim();
+  if (!dest) return "";
+  try {
+    const host = new URL(dest).hostname.trim();
+    return isValidShopDomain(host) ? host : "";
+  } catch {
+    return "";
+  }
+}
 
 async function resolveAdminForPdf(request: Request): Promise<{ admin: Awaited<ReturnType<typeof requireAdmin>>["admin"]; shop: string }> {
   try {
@@ -14,24 +25,24 @@ async function resolveAdminForPdf(request: Request): Promise<{ admin: Awaited<Re
     if (!(error instanceof Response)) {
       throw error;
     }
-
-    const url = new URL(request.url);
-    const shop = String(url.searchParams.get("shop") ?? "").trim();
-    const idTokenQuery = String(url.searchParams.get("id_token") ?? "").trim();
-    const authorization = String(request.headers.get("Authorization") ?? "").trim();
-    const bearerToken = authorization.toLowerCase().startsWith("bearer ") ? authorization.slice(7).trim() : "";
-    const token = idTokenQuery || bearerToken;
-
-    if (!shop || !token || !isValidShopDomain(shop)) {
-      throw error;
-    }
-
-    const unauth = await unauthenticated.admin(shop);
-    return {
-      admin: unauth.admin as Awaited<ReturnType<typeof requireAdmin>>["admin"],
-      shop,
-    };
   }
+
+  const { sessionToken } = await authenticate.pos(request);
+  const sessionShop = parseShopFromDest(sessionToken.dest);
+  if (!sessionShop) {
+    throw new Response("Contexte boutique invalide.", { status: 403 });
+  }
+
+  const requestShop = new URL(request.url).searchParams.get("shop");
+  if (requestShop && requestShop !== sessionShop) {
+    throw new Response("Contexte boutique incohérent.", { status: 403 });
+  }
+
+  const unauth = await unauthenticated.admin(sessionShop);
+  return {
+    admin: unauth.admin as Awaited<ReturnType<typeof requireAdmin>>["admin"],
+    shop: sessionShop,
+  };
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {

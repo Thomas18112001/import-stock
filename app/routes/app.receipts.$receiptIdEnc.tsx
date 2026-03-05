@@ -318,11 +318,13 @@ export default function ReceiptDetailPage() {
         throw new Error("Session Shopify introuvable. Rechargez l'application puis réessayez.");
       }
 
-      const requestUrl = new URL(rawPdfUrl, window.location.origin);
-      requestUrl.searchParams.set("id_token", token);
       const headers = new Headers();
       headers.set("Authorization", `Bearer ${token}`);
-      const response = await fetch(requestUrl.toString(), { method: "GET", headers, credentials: "include" });
+      const response = await fetch(new URL(rawPdfUrl, window.location.origin).toString(), {
+        method: "GET",
+        headers,
+        credentials: "include",
+      });
       if (!response.ok) {
         throw new Error(`Téléchargement impossible (HTTP ${response.status}).`);
       }

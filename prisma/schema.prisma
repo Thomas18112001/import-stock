@@ -1,0 +1,196 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum SupplierOrderStatus {
+  DRAFT
+  INCOMING
+  PARTIAL
+  RECEIVED
+  CANCELED
+}
+
+enum IncomingStatus {
+  PENDING
+  PARTIAL
+  RECEIVED
+  CANCELED
+}
+
+enum AlertType {
+  LOW_STOCK
+  STOCKOUT_RISK
+  ETA_DELAY
+  SYNC_ERROR
+}
+
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+model Location {
+  id                String          @id @default(cuid())
+  shopDomain        String
+  shopifyLocationId String
+  name              String
+  isActive          Boolean         @default(true)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  supplierOrders    SupplierOrder[]
+  incoming          Incoming[]
+  thresholds        Threshold[]
+  alerts            Alert[]
+  auditLogs         AuditLog[]
+  mappings          PrestaShopifyMapping[]
+
+  @@unique([shopDomain, shopifyLocationId], name: "uniq_shop_location")
+  @@index([shopDomain, name])
+}
+
+model SupplierOrder {
+  id               String              @id @default(cuid())
+  shopDomain       String
+  prestaOrderId    Int
+  prestaReference  String?
+  locationId       String
+  status           SupplierOrderStatus @default(DRAFT)
+  etaDate          DateTime?
+  source           String              @default("prestashop")
+  currency         String              @default("EUR")
+  totalAmount      Decimal?
+  sourcePayload    Json?
+  historyPayload   Json?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  canceledAt       DateTime?
+  receivedAt       DateTime?
+
+  location         Location            @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  incoming         Incoming[]
+
+  @@unique([shopDomain, prestaOrderId, locationId], name: "uniq_presta_order_location")
+  @@index([shopDomain, status])
+  @@index([locationId, etaDate])
+}
+
+model Incoming {
+  id               String         @id @default(cuid())
+  shopDomain       String
+  supplierOrderId  String
+  locationId       String
+  sku              String
+  inventoryItemId  String?
+  quantityOrdered  Int
+  quantityReceived Int            @default(0)
+  etaDate          DateTime?
+  status           IncomingStatus @default(PENDING)
+  sourceRef        String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  supplierOrder    SupplierOrder  @relation(fields: [supplierOrderId], references: [id], onDelete: Restrict)
+  location         Location       @relation(fields: [locationId], references: [id], onDelete: Restrict)
+
+  @@index([shopDomain, locationId, sku])
+  @@index([locationId, status, etaDate])
+}
+
+model Threshold {
+  id               String   @id @default(cuid())
+  shopDomain       String
+  locationId       String
+  sku              String
+  minQty           Int      @default(0)
+  maxQty           Int      @default(0)
+  targetCoverageDays Int?   
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  location         Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
+
+  @@unique([locationId, sku], name: "uniq_threshold_location_sku")
+  @@index([shopDomain, sku])
+}
+
+model Alert {
+  id               String      @id @default(cuid())
+  shopDomain       String
+  locationId       String
+  sku              String?
+  type             AlertType
+  status           AlertStatus @default(OPEN)
+  severity         String      @default("warning")
+  message          String
+  recipientGroup   String?
+  detailsPayload   Json?
+  triggeredAt      DateTime    @default(now())
+  resolvedAt       DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  location         Location    @relation(fields: [locationId], references: [id], onDelete: Restrict)
+
+  @@index([shopDomain, type, status])
+  @@index([locationId, triggeredAt])
+}
+
+model AlertRecipient {
+  id               String   @id @default(cuid())
+  shopDomain       String
+  alertType        AlertType
+  email            String
+  name             String?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([shopDomain, alertType, email], name: "uniq_alert_recipient")
+}
+
+model AuditLog {
+  id               String   @id @default(cuid())
+  shopDomain       String
+  eventType        String
+  entityType       String
+  entityId         String?
+  locationId       String?
+  prestaOrderId    Int?
+  status           String?
+  message          String?
+  payload          Json?
+  actor            String?
+  createdAt        DateTime @default(now())
+
+  location         Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  @@index([shopDomain, createdAt])
+  @@index([locationId, createdAt])
+  @@index([prestaOrderId])
+}
+
+model PrestaShopifyMapping {
+  id                    String   @id @default(cuid())
+  shopDomain            String
+  prestaOrderId         Int
+  prestaReference       String?
+  locationId            String
+  shopifyReceiptGid     String?
+  shopifyPurchaseOrderGid String?
+  splitGroupKey         String?
+  strategy              String   @default("single")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  location              Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
+
+  @@unique([shopDomain, prestaOrderId, locationId], name: "uniq_mapping_presta_location")
+  @@index([shopDomain, prestaReference])
+}
